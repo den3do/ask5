@@ -1,6 +1,5 @@
-import './style.css'
+import './style.css';
 import React, { useState, useEffect, useMemo } from 'react';
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 // --- 基礎資料庫 ---
@@ -608,4 +607,5 @@ root.render(
     <DivinationApp />
   </React.StrictMode>
 );
+
 
