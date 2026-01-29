@@ -1,5 +1,7 @@
 import './style.css'
 import React, { useState, useEffect, useMemo } from 'react';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 
 // --- 基礎資料庫 ---
 
@@ -598,3 +600,12 @@ ${linesStr}
 
 
 export default DivinationApp;
+
+// 關鍵的掛載邏輯：這會把元件塞進 index.html 裡的 <div id="root"></div>
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <DivinationApp />
+  </React.StrictMode>
+);
+
