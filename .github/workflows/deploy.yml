@@ -2,11 +2,17 @@ name: Deploy React to GitHub Pages
 on:
   push:
     branches: [ main ]
+permissions:
+  contents: write
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Install and Build
         run: |
           npm install
@@ -14,5 +20,5 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist # 如果你是用 Vite，這裡是 dist；如果是 Create React App，則是 build
+          folder: dist # Vite 編譯後的產出資料夾
           branch: gh-pages
