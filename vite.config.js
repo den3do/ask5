@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './', // 改成相對路徑，適應 GitHub Pages 的子目錄
+  base: '/ask5/', // 這裡一定要跟你的儲存庫名稱一模一樣
 })
