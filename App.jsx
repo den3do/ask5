@@ -1,3 +1,4 @@
+import './style.css'
 import React, { useState, useEffect, useMemo } from 'react';
 
 // --- 基礎資料庫 ---
@@ -594,5 +595,6 @@ ${linesStr}
     </div>
   );
 };
+
 
 export default DivinationApp;
