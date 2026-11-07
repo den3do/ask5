@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { 
   Sparkles, BookOpen, Users, Calendar, Clock, Compass, Heart, 
   ShieldAlert, CheckCircle2, AlertCircle, Copy, RefreshCw, 
@@ -13,8 +13,12 @@ import {
 import { chineseClock } from './utils/chineseTime';
 import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
-import PersonalHub from './components/PersonalHub';
-import SynastryReport from './components/SynastryReport';
+const PersonalHub = lazy(() => import('./components/PersonalHub'));
+const SynastryReport = lazy(() => import('./components/SynastryReport'));
+
+const PanelLoading = () => (
+  <div className="p-8 text-center text-sm text-stone-500 font-sans">載入中…</div>
+);
 
 const GLOSSARY = [
   ['用神', '代表你所問的那件事的那一爻（問財運看妻財、問工作看官鬼…），是整個卦的主角。'],
