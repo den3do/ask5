@@ -766,6 +766,9 @@ ${linesStr}
           <p className="text-stone-500">
             本程式依據《易經》、《卜筮正宗》、《梅花易數》演算法構建，旨在提供人生哲思指引與人際溝通借鑑。
           </p>
+          <p className="text-amber-500 font-bold">
+            免責聲明：本站內容僅供娛樂與自我探索，不具科學效度，亦不構成醫療、投資、法律或心理諮商建議。
+          </p>
           <p className="text-stone-600 font-sans text-[11px] pt-2">
             部署網址：https://den3do.github.io/ask5/ ‧ 純前端無伺服器架構
           </p>
