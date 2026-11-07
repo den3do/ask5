@@ -89,5 +89,28 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   ok(good.score > bad.score && good.notes.some((n) => n.text.includes('六合')) && bad.notes.some((n) => n.text.includes('相沖')), `合婚：甲己合＋子丑合 (${good.score}) > 子午沖 (${bad.score})`);
 }
 
+// 9. 一事一占排盤（buildDivinationBoard 純函式，驗證自 App.jsx 抽出的排盤邏輯）
+{
+  const pillars = { dayStem: '甲', kongWang: [], yuePoBranch: '午', riPoBranch: '子' };
+
+  // 8、8、6 → 上下卦皆坤（坤為地）、第 6 爻動
+  const b1 = buildDivinationBoard({ num1: 8, num2: 8, num3: 6, pillars });
+  ok(b1.moving === 6, '動爻：6 % 6 = 0 → 取第 6 爻');
+  ok(b1.uMod === 0 && b1.lMod === 0 && b1.originalHex.name === '坤為地', `8、8 → 本卦坤為地（得 ${b1.originalHex.name}）`);
+  ok(b1.changedHex.name === '山地剝', `第 6 爻動 → 變卦山地剝（得 ${b1.changedHex.name}）`);
+  ok(b1.palaceInfo.shi === 6 && b1.palaceInfo.ying === 3, '坤宮：世在六爻、應在三爻');
+  ok(b1.nuclearHex.hex.name === '坤為地', '互卦亦為坤為地');
+  ok(b1.linesData.length === 6
+    && b1.linesData.filter((l) => l.isMoving).length === 1
+    && b1.linesData.filter((l) => l.isShi).length === 1
+    && b1.linesData.filter((l) => l.isYing).length === 1, '六爻盤：動爻／世／應各只一爻');
+  ok(b1.linesData[5].isMoving && b1.linesData[5].changed !== null
+    && b1.linesData.slice(0, 5).every((l) => l.changed === null), '僅動爻該爻帶動變資料');
+
+  // 1、1、1 → 乾為天、初爻動
+  const b2 = buildDivinationBoard({ num1: 1, num2: 1, num3: 1, pillars });
+  ok(b2.originalHex.name === '乾為天' && b2.moving === 1 && b2.linesData[0].isMoving, '1、1、1 → 乾為天、初爻動');
+}
+
 console.log(fail ? `\n${fail} 項失敗` : '\n全部通過');
 process.exit(fail ? 1 : 0);

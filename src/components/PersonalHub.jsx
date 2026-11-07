@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import BirthForm from './BirthForm';
-import IchingPanel from './panels/IchingPanel';
-import WeixinPanel from './panels/WeixinPanel';
-import ZiweiPanel from './panels/ZiweiPanel';
-import HdPanel from './panels/HdPanel';
-import AstroPanel from './panels/AstroPanel';
-import FusionPanel from './panels/FusionPanel';
 import { DEFAULT_BIRTH, computeFullProfile } from '../utils/profile';
+
+// 面板背後掛著重型引擎（iztro 紫微、astronomy-engine 占星），改為點到哪個分頁才載入，避免拖慢首屏
+const IchingPanel = lazy(() => import('./panels/IchingPanel'));
+const WeixinPanel = lazy(() => import('./panels/WeixinPanel'));
+const ZiweiPanel = lazy(() => import('./panels/ZiweiPanel'));
+const HdPanel = lazy(() => import('./panels/HdPanel'));
+const AstroPanel = lazy(() => import('./panels/AstroPanel'));
+const FusionPanel = lazy(() => import('./panels/FusionPanel'));
 
 const SUBTABS = [
   { id: 'iching', label: '易經命卦', emoji: '☯️', C: IchingPanel },
@@ -95,7 +97,11 @@ export default function PersonalHub({ onOpenSettings }) {
               ))}
             </div>
           </div>
-          {Active && <Active profile={profile} onOpenSettings={onOpenSettings} />}
+          {Active && (
+            <Suspense fallback={<div className="p-8 text-center text-sm text-stone-500 font-sans">命盤載入中…</div>}>
+              <Active profile={profile} onOpenSettings={onOpenSettings} />
+            </Suspense>
+          )}
         </div>
       )}
     </div>

@@ -215,6 +215,120 @@ export const getTopicYongShen = (topic, gender = '男') => {
 };
 
 /**
+ * 【一事一占：排盤】
+ * 依三個心念數字與當前四柱，排出一事一占的完整盤面（純函式，不依賴 UI，可獨立測試）。
+ * 上卦 = 數字1 % 8、下卦 = 數字2 % 8、動爻 = 數字3 % 6（整除時分別取 8 / 6）。
+ * @param {Object} args
+ * @param {number} args.num1 上卦取數
+ * @param {number} args.num2 下卦取數
+ * @param {number} args.num3 動爻取數
+ * @param {Object} args.pillars 當前四柱（需含 dayStem、kongWang、yuePoBranch、riPoBranch）
+ * @returns {Object} { uMod, lMod, moving, uTrigram, lTrigram, newUId, newLId, newUTrigram, newLTrigram,
+ *                     palaceInfo, linesData, originalHex, changedHex, nuclearHex }
+ */
+export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
+  let uNum = num1 % 8;
+  if (uNum === 0) uNum = 8;
+  let lNum = num2 % 8;
+  if (lNum === 0) lNum = 8;
+  let moving = num3 % 6;
+  if (moving === 0) moving = 6;
+
+  const toTrigramKey = (num) => (num === 8 ? 0 : num);
+  const uMod = toTrigramKey(uNum);
+  const lMod = toTrigramKey(lNum);
+
+  const uTrigram = TRIGRAMS[uMod];
+  const lTrigram = TRIGRAMS[lMod];
+
+  const getBits = (bin) => bin.split('').map(Number);
+  const lBits = getBits(lTrigram.binary);
+  const uBits = getBits(uTrigram.binary);
+
+  // 動爻變卦：1~3 爻動下卦、4~6 爻動上卦（binary 高位為上爻）
+  const newLBits = [...lBits];
+  const newUBits = [...uBits];
+  const flip = (bit) => (bit === 1 ? 0 : 1);
+  if (moving <= 3) {
+    newLBits[3 - moving] = flip(newLBits[3 - moving]);
+  } else {
+    newUBits[6 - moving] = flip(newUBits[6 - moving]);
+  }
+
+  const findId = (bits) => {
+    const bin = bits.join('');
+    return parseInt(Object.keys(TRIGRAMS).find((k) => TRIGRAMS[k].binary === bin), 10);
+  };
+  const newLId = findId(newLBits);
+  const newUId = findId(newUBits);
+
+  const palaceInfo = findPalaceAndShi(uMod, lMod);
+  const sixBeasts = getSixBeasts(pillars.dayStem);
+
+  const allBranches = [...NAJIA_TABLE[lMod].inner, ...NAJIA_TABLE[uMod].outer];
+  const allNewBranches = [...NAJIA_TABLE[newLId].inner, ...NAJIA_TABLE[newUId].outer];
+
+  const allLinesBits = [lBits[2], lBits[1], lBits[0], uBits[2], uBits[1], uBits[0]];
+  const linesData = [];
+
+  for (let i = 0; i < 6; i++) {
+    const lineNum = i + 1;
+    const bit = allLinesBits[i];
+    const branch = allBranches[i];
+    const wuxing = BRANCH_WUXING[branch];
+    const relation = getRelation(palaceInfo.palaceWuxing, wuxing);
+    const beast = sixBeasts[i];
+
+    const isKongWang = pillars.kongWang.includes(branch);
+    const isYuePo = branch === pillars.yuePoBranch;
+    const isRiPo = branch === pillars.riPoBranch && moving !== lineNum;
+
+    let changedData = null;
+    if (moving === lineNum) {
+      const cBranch = allNewBranches[i];
+      const cWuxing = BRANCH_WUXING[cBranch];
+      const cRelation = getRelation(palaceInfo.palaceWuxing, cWuxing);
+      const interact = WUXING_RELATION[cWuxing][wuxing];
+      const specialInteract = checkBranchInteraction(branch, cBranch);
+      changedData = { branch: cBranch, wuxing: cWuxing, relation: cRelation, interact, specialInteract };
+    }
+
+    linesData.push({
+      lineNum,
+      bit,
+      branch,
+      wuxing,
+      relation,
+      beast,
+      isShi: palaceInfo.shi === lineNum,
+      isYing: palaceInfo.ying === lineNum,
+      isMoving: moving === lineNum,
+      isKongWang,
+      isYuePo,
+      isRiPo,
+      changed: changedData,
+    });
+  }
+
+  return {
+    uMod,
+    lMod,
+    moving,
+    uTrigram,
+    lTrigram,
+    newUId,
+    newLId,
+    newUTrigram: TRIGRAMS[newUId],
+    newLTrigram: TRIGRAMS[newLId],
+    palaceInfo,
+    linesData,
+    originalHex: getHexData(uMod, lMod),
+    changedHex: getHexData(newUId, newLId),
+    nuclearHex: findNuclearHexagram(uMod, lMod),
+  };
+};
+
+/**
  * 【一事一占：吉凶判斷引擎演算法】
  * 根據用神、月建、日辰、動爻、世應評分，產出 7 等級與白話評語
  */

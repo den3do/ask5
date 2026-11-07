@@ -1,0 +1,23 @@
+name: Verify
+
+# PR 與非 main 分支推送時，只做「驗證」不做部署，確保曆法/論命邏輯的回歸能被即時攔下
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run verification tests
+        run: npm test

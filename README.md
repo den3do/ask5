@@ -6,14 +6,14 @@
 
 ## 📖 專案簡介
 
-本專案是一個現代化、架構嚴謹的線上易經命理與占卜 Web 應用程式。
-融合傳統**「梅花易數」**與**「文王六爻納甲排盤及斷卦演算法」**，打造出三大核心模組：
+本專案是一個現代化、架構嚴謹的線上命理與占卜 Web 應用程式。以傳統**「梅花易數」**與**「文王六爻納甲排盤及斷卦演算法」**為核心，並整合**紫微斗數、西洋占星、人類圖、唯心宗**等體系，提供三大分頁功能：
 
 1. **一事一占（短期吉凶預測與白話評語）**
-2. **個人終身卦（一生大運與命理深度報告）**
+2. **個人命理（輸入一次生辰，檢視易經命卦／紫微斗數／西洋占星／人類圖／唯心宗與融合報告）**
 3. **雙人命卦合盤（契合度評分與具體相處指引）**
 
-全系統採用 **100% 純前端無伺服器（Client-Side SPA）** 設計，完全不需要後端伺服器或外部 API，運算速度極快，並透過 GitHub Actions 自動構建部署至 GitHub Pages。
+**排盤運算 100% 在瀏覽器端本地完成**（純前端 SPA，無自架後端伺服器），運算速度極快，並透過 GitHub Actions 自動建置與測試後部署至 GitHub Pages。
+AI 解讀為**選用功能（BYOK，自備金鑰）**：啟用後才會由瀏覽器直接呼叫使用者自選的 LLM（Gemini／OpenRouter 等），未啟用時不會有任何對外連線。
 
 ---
 
@@ -72,28 +72,46 @@
 
 ```text
 ask5/
-├── .github/workflows/deploy.yml  # GitHub Actions 自動部署腳本 (自動發布至 gh-pages)
-├── dist/                         # Vite 編譯產出的純靜態發布包
+├── .github/workflows/
+│   ├── deploy.yml                # 推送 main：測試 → 建置 → 發布至 gh-pages
+│   └── verify.yml                # PR／分支推送：只跑驗證，不部署
+├── scripts/
+│   ├── verify-engine.mjs         # 曆法/排盤層驗證（與 lunar-typescript 交叉比對）
+│   └── verify-reading.mjs        # 論命層驗證（換年界、八字強弱/調候、六爻用神、合婚、一事一占排盤）
 ├── src/
 │   ├── data/
 │   │   └── constants.js          # 八卦基礎數據、六十四卦完整資料庫、納甲表、八宮歸屬、地支刑沖合害
 │   ├── utils/
-│   │   ├── lunar.js              # 1900-2100 萬年曆、公曆/農曆轉換、四柱干支計算、梅花/終身卦起數
-│   │   └── iching.js             # 六爻排盤、互卦、旺相休囚、一事一占計分引擎、終身卦報告生成、雙人合盤評估
+│   │   ├── lunar.js              # 1900-2100 萬年曆、公曆/農曆轉換、四柱干支計算、起數
+│   │   ├── chineseTime.js        # 真太陽時、時區與夏令時間校正
+│   │   ├── iching.js             # 六爻排盤（buildDivinationBoard）、旺相休囚、一事一占計分引擎、終身卦報告生成、雙人合盤評估
+│   │   ├── destiny.js            # 個人終身命卦（由生辰排盤）
+│   │   ├── bazi.js / ziwei.js    # 八字分析、紫微斗數（iztro）
+│   │   ├── astrology.js / humanDesign.js / weixin.js  # 西洋占星（astronomy-engine）、人類圖、唯心宗
+│   │   ├── profile.js            # 彙整各體系為單一命盤資料
+│   │   ├── aiService.js          # AI 解讀（BYOK，金鑰僅存 sessionStorage）
+│   │   └── savedProfiles.js      # 本機生辰檔案（localStorage）
+│   ├── components/
+│   │   ├── PersonalHub.jsx       # 個人命理：分頁 + React.lazy 懶載入各體系面板
+│   │   ├── panels/               # IchingPanel／ZiweiPanel／AstroPanel／HdPanel／WeixinPanel／FusionPanel
+│   │   └── ...                   # SmartReading、AiSettingsModal、BirthForm、SynastryReport 等
 │   ├── App.jsx                   # 主畫面 UI、三大分頁切換與交互邏輯
-│   ├── main.jsx                  # React 掛載入口
+│   ├── main.jsx                  # React 掛載入口（含全域 ErrorBoundary）
 │   └── style.css                 # 全局樣式
 ├── index.html                    # 頁面入口 HTML
-├── package.json                  # 專案依賴 (React 18, Vite, Tailwind CSS, Lucide React)
+├── package.json                  # 專案依賴與驗證腳本
 ├── vite.config.js                # Vite 配置 (base: '/ask5/')
 └── README.md                     # 本專案說明文件
 ```
 
 ### 技術特點
-- **前端框架**：React 18 + Vite 5 + Tailwind CSS
-- **圖標庫**：Lucide React
-- **純前端運算**：所有萬年曆轉換、卦象計算、評分演算法與評語生成全部在瀏覽器端本地完成，零伺服器維護成本，隱私安全無虞。
-- **無縫部署**：Vite 配置了 `base: '/ask5/'`，只要推送到 `main` 分支，GitHub Actions 就會自動編譯並更新 GitHub Pages。
+- **前端框架**：React 18 + Vite 5 + Tailwind CSS；圖標庫 Lucide React
+- **命理引擎**：六爻納甲（自研）、iztro（紫微斗數）、astronomy-engine（西洋占星）、lunar-typescript（曆法驗證基準）
+- **純前端運算**：萬年曆轉換、卦象計算、評分演算法與評語生成全在瀏覽器端本地完成，零伺服器維護成本。
+- **AI 解讀（選用 BYOK）**：金鑰僅存於分頁 `sessionStorage`、不落地；錯誤訊息自動遮蔽金鑰；未啟用時無任何對外連線。
+- **效能與韌性**：個人命理／合盤等重型面板以 `React.lazy` + `Suspense` 分頁懶載入，並有全域 `ErrorBoundary` 避免排盤例外造成白屏。
+- **自動化品質把關**：`npm test` 執行曆法與論命雙層驗證腳本；`deploy.yml` 於部署前強制跑測試，PR 另由 `verify.yml` 把關。
+- **無縫部署**：Vite 配置 `base: '/ask5/'`，推送到 `main` 分支即自動測試、建置並更新 GitHub Pages。
 
 ---
 
@@ -114,7 +132,13 @@ npm run dev
 npm run build
 ```
 
-### 4. 部署至 GitHub Pages
+### 4. 執行驗證測試
+```bash
+npm test
+```
+（等同 `node scripts/verify-engine.mjs && node scripts/verify-reading.mjs`；CI 在部署前會強制執行。）
+
+### 5. 部署至 GitHub Pages
 代碼推送到 `main` 分支即可自動部署：
 ```bash
 git add .

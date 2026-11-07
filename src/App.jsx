@@ -5,14 +5,8 @@ import {
   Award, Briefcase, Coins, Flame, ChevronRight, HelpCircle,
   Settings, Bot, Star, Globe, Menu, X, Layers, HeartHandshake
 } from 'lucide-react';
-import { 
-  TRIGRAMS, BRANCH_WUXING, WUXING_RELATION, NAJIA_TABLE, STEMS, BRANCHES 
-} from './data/constants';
-import { 
-  checkBranchInteraction, getRelation, getSixBeasts, findPalaceAndShi, 
-  getHexData, getHourStem, getKongWang, findNuclearHexagram, 
-  evaluateDivination, generateDestinyReport, generateCompatibilityReport 
-} from './utils/iching';
+import { BRANCHES } from './data/constants';
+import { buildDivinationBoard, evaluateDivination } from './utils/iching';
 import { 
   solarToLunar, lunarToSolar, calculatePillars, calculateDestinyHexNumbers 
 } from './utils/lunar';
@@ -108,104 +102,11 @@ const DivinationApp = () => {
     }
     setDivError('');
 
-    // 上卦、下卦、動爻
-    let uNum = n1 % 8;
-    if (uNum === 0) uNum = 8;
-    let lNum = n2 % 8;
-    if (lNum === 0) lNum = 8;
-    let moving = n3 % 6;
-    if (moving === 0) moving = 6;
-
-    const toTrigramKey = (num) => num === 8 ? 0 : num;
-    const uMod = toTrigramKey(uNum);
-    const lMod = toTrigramKey(lNum);
-
-    const uTrigram = TRIGRAMS[uMod];
-    const lTrigram = TRIGRAMS[lMod];
-
-    // 動變計算
-    const getBits = (bin) => bin.split('').map(Number);
-    const lBits = getBits(lTrigram.binary);
-    const uBits = getBits(uTrigram.binary);
-
-    let newLBits = [...lBits];
-    let newUBits = [...uBits];
-    const flip = (bit) => bit === 1 ? 0 : 1;
-
-    if (moving <= 3) {
-      newLBits[3 - moving] = flip(newLBits[3 - moving]);
-    } else {
-      newUBits[6 - moving] = flip(newUBits[6 - moving]);
-    }
-
-    const findId = (bits) => {
-      const bin = bits.join('');
-      return parseInt(Object.keys(TRIGRAMS).find(k => TRIGRAMS[k].binary === bin), 10);
-    };
-    const newLId = findId(newLBits);
-    const newUId = findId(newUBits);
-
-    const palaceInfo = findPalaceAndShi(uMod, lMod);
-    const sixBeasts = getSixBeasts(currentPillars.dayStem);
-
-    const innerNaJia = NAJIA_TABLE[lMod].inner;
-    const outerNaJia = NAJIA_TABLE[uMod].outer;
-    const allBranches = [...innerNaJia, ...outerNaJia];
-
-    const newInnerNaJia = NAJIA_TABLE[newLId].inner;
-    const newOuterNaJia = NAJIA_TABLE[newUId].outer;
-    const allNewBranches = [...newInnerNaJia, ...newOuterNaJia];
-
-    const allLinesBits = [lBits[2], lBits[1], lBits[0], uBits[2], uBits[1], uBits[0]];
-    const linesData = [];
-
-    for (let i = 0; i < 6; i++) {
-      const lineNum = i + 1;
-      const bit = allLinesBits[i];
-      const branch = allBranches[i];
-      const wuxing = BRANCH_WUXING[branch];
-      const relation = getRelation(palaceInfo.palaceWuxing, wuxing);
-      const beast = sixBeasts[i];
-      const isKongWang = currentPillars.kongWang.includes(branch);
-      const isYuePo = branch === currentPillars.yuePoBranch;
-      const isRiPo = branch === currentPillars.riPoBranch && (moving !== lineNum);
-
-      let changedData = null;
-      if (moving === lineNum) {
-        const cBranch = allNewBranches[i];
-        const cWuxing = BRANCH_WUXING[cBranch];
-        const cRelation = getRelation(palaceInfo.palaceWuxing, cWuxing);
-        const interact = WUXING_RELATION[cWuxing][wuxing];
-        const specialInteract = checkBranchInteraction(branch, cBranch);
-        changedData = {
-          branch: cBranch,
-          wuxing: cWuxing,
-          relation: cRelation,
-          interact,
-          specialInteract
-        };
-      }
-
-      linesData.push({
-        lineNum,
-        bit,
-        branch,
-        wuxing,
-        relation,
-        beast,
-        isShi: palaceInfo.shi === lineNum,
-        isYing: palaceInfo.ying === lineNum,
-        isMoving: moving === lineNum,
-        isKongWang,
-        isYuePo,
-        isRiPo,
-        changed: changedData
-      });
-    }
-
-    const hexInfo = getHexData(uMod, lMod);
-    const newHexInfo = getHexData(newUId, newLId);
-    const nuclearInfo = findNuclearHexagram(uMod, lMod);
+    const board = buildDivinationBoard({ num1: n1, num2: n2, num3: n3, pillars: currentPillars });
+    const {
+      uTrigram, lTrigram, newUTrigram, newLTrigram, palaceInfo,
+      linesData, moving, originalHex, changedHex, nuclearHex
+    } = board;
 
     // 進行一事一占演算法評估
     const evaluation = evaluateDivination({
@@ -214,9 +115,9 @@ const DivinationApp = () => {
       linesData,
       movingLine: moving,
       palaceWuxing: palaceInfo.palaceWuxing,
-      originalHex: hexInfo,
-      changedHex: newHexInfo,
-      nuclearHex: nuclearInfo,
+      originalHex,
+      changedHex,
+      nuclearHex,
       gender: divGender,
       palaceId: palaceInfo.palaceId,
     });
@@ -229,14 +130,14 @@ const DivinationApp = () => {
     setDivResult({
       uTrigram,
       lTrigram,
-      newUTrigram: TRIGRAMS[newUId],
-      newLTrigram: TRIGRAMS[newLId],
+      newUTrigram,
+      newLTrigram,
       palaceInfo,
       linesData: linesWithYongShen,
       moving,
-      originalHex: hexInfo,
-      changedHex: newHexInfo,
-      nuclearHex: nuclearInfo,
+      originalHex,
+      changedHex,
+      nuclearHex,
       pillars: currentPillars,
       topic: divTopic,
       question: divQuestion,
@@ -835,8 +736,16 @@ ${linesStr}
           </div>
         )}
 
-        {activeTab === 2 && <PersonalHub onOpenSettings={() => setIsAiModalOpen(true)} />}
-        {activeTab === 3 && <SynastryReport onOpenSettings={() => setIsAiModalOpen(true)} />}
+        {activeTab === 2 && (
+          <Suspense fallback={<PanelLoading />}>
+            <PersonalHub onOpenSettings={() => setIsAiModalOpen(true)} />
+          </Suspense>
+        )}
+        {activeTab === 3 && (
+          <Suspense fallback={<PanelLoading />}>
+            <SynastryReport onOpenSettings={() => setIsAiModalOpen(true)} />
+          </Suspense>
+        )}
 
       </main>
 
