@@ -6,7 +6,7 @@
 import { lunarYearOf, baziYearOf, calculatePillars } from '../src/utils/lunar.js';
 import { analyzeBazi, compareBazi } from '../src/utils/bazi.js';
 import { calculateZiweiAstrolabe, analyzeDecadals } from '../src/utils/ziwei.js';
-import { evaluateDivination, getTopicYongShen } from '../src/utils/iching.js';
+import { evaluateDivination, getTopicYongShen, buildDivinationBoard } from '../src/utils/iching.js';
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log('✗ FAIL', m); } else console.log('✓', m); };
