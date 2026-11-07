@@ -44,14 +44,10 @@ export function bodyLongitude(id, date) {
       return norm360(Astronomy.SunPosition(t).elon + 180);
     case 'moon':
       return norm360(Astronomy.EclipticGeoMoon(t).lon);
-    case 'northNode': {
-      const T = t.tt / 36525;
-      return norm360(125.0445479 - 1934.1362891 * T + 0.0020754 * T * T);
-    }
-    case 'southNode': {
-      const T = t.tt / 36525;
-      return norm360(125.0445479 - 1934.1362891 * T + 0.0020754 * T * T + 180);
-    }
+    case 'northNode':
+      return trueNodeLongitude(t);
+    case 'southNode':
+      return norm360(trueNodeLongitude(t) + 180);
     default: {
       const name = BODY_NAMES[id];
       if (!name) throw new Error(`未知天體：${id}`);
@@ -60,6 +56,24 @@ export function bodyLongitude(id, date) {
       return norm360(Astronomy.SphereFromVector(v).lon);
     }
   }
+}
+
+/**
+ * 真實月交點（升交點）：取月球軌道面法向量，於回歸黃道座標求交點方向。
+ * 以前後各 0.05 日的月球位置向量求速度方向，與人類圖軟體慣用的真交點一致。
+ */
+function trueNodeLongitude(t) {
+  const dt = 0.05;
+  const rot = Astronomy.Rotation_EQJ_ECT(t);
+  const vec = (tt) => Astronomy.RotateVector(rot, Astronomy.GeoMoon(tt));
+  const a = vec(t.AddDays(-dt));
+  const b = vec(t.AddDays(dt));
+  const p = vec(t);
+  // 角動量方向 h = r × v（v 以前後位置差近似）
+  const vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z;
+  const hx = p.y * vz - p.z * vy;
+  const hy = p.z * vx - p.x * vz;
+  return norm360(deg(Math.atan2(hx, -hy)));
 }
 
 /** 太陽每日平均移動速度，供回溯求解使用 */

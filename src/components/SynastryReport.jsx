@@ -1,8 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { HeartHandshake, AlertCircle } from 'lucide-react';
 import BirthForm from './BirthForm';
-import AiAnalysisSection from './AiAnalysisSection';
-import { ACCENT } from './UnifiedReport';
+import SmartReading from './SmartReading';
+import { Explainer } from './ui';
+
+const ACCENT = {
+  amber: 'border-amber-300 bg-amber-50 text-amber-900',
+  purple: 'border-purple-300 bg-purple-50 text-purple-900',
+  blue: 'border-sky-300 bg-sky-50 text-sky-900',
+  emerald: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+};
 import { DEFAULT_BIRTH, computeFullProfile, compareProfiles, generatePairPrompt } from '../utils/profile';
 
 const DIM_ACCENT = { iching: 'amber', ziwei: 'purple', astro: 'blue', hd: 'emerald' };
@@ -46,10 +53,11 @@ export default function SynastryReport({ onOpenSettings }) {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      <div className="bg-pink-50 border-l-4 border-pink-600 p-4 rounded-r-lg text-sm leading-relaxed shadow-sm text-stone-800">
-        <span className="font-bold text-pink-900">【全維合盤】：</span>
-        以易經世應五行、紫微命夫妻宮、占星跨盤相位、人類圖電磁／同伴／妥協通道四個維度同時評估兩人的契合度。
-      </div>
+      <Explainer title="雙人合盤怎麼看？" accent="rose">
+        <p>輸入兩人的生辰，同時用四個系統評估：<b>易經</b>看兩人世爻五行的生剋，<b>紫微</b>看命宮與夫妻宮的互照，<b>占星</b>看日月金火的跨盤相位（靈魂共鳴、情感溝通、吸引力），<b>人類圖</b>看通道如何互補。</p>
+        <p>人類圖的「電磁」是各持通道一端、相遇產生強烈吸引；「同伴」是兩人都有完整通道、默契相近；「妥協」是一人完整、另一人只有一端，需要磨合。</p>
+        <p>分數是本站自訂的啟發式估算，請當作「相處觀察重點」，而不是對關係的判決。</p>
+      </Explainer>
 
       <BirthForm title="甲方生辰" value={a} onChange={setA} />
       <BirthForm title="乙方生辰" value={b} onChange={setB} />
@@ -90,6 +98,11 @@ export default function SynastryReport({ onOpenSettings }) {
             <div className={`rounded-xl border p-4 ${ACCENT[DIM_ACCENT.iching]}`}>
               <div className="font-bold text-sm mb-1">易經：世應五行（{cmp.iching.tier}）</div>
               <p className="text-xs leading-relaxed">{cmp.iching.dynamicSummary}</p>
+              {(cmp.iching.goldenRules?.length > 0) && (
+                <ul className="text-xs mt-2 space-y-0.5 list-disc pl-4">
+                  {cmp.iching.goldenRules.map((g, i) => <li key={i}>{g}</li>)}
+                </ul>
+              )}
             </div>
 
             <div className={`rounded-xl border p-4 ${ACCENT[DIM_ACCENT.ziwei]}`}>
@@ -129,11 +142,7 @@ export default function SynastryReport({ onOpenSettings }) {
             </div>
           </div>
 
-          <AiAnalysisSection
-            title="太極同心 ‧ AI 雙人四維相處錦囊"
-            prompt={prompt}
-            onOpenSettings={onOpenSettings}
-          />
+          <SmartReading systemKey="pair" title="智慧相命" prompt={prompt} onOpenSettings={onOpenSettings} />
         </div>
       )}
     </div>

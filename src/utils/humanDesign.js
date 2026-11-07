@@ -30,7 +30,7 @@ export const HD_CENTERS = {
   solar: { name: '情緒中心（太陽神經叢）', chName: '情緒', gates: [6, 22, 30, 36, 37, 49, 55], color: '#ec4899', desc: '情緒波浪、感性、靈性壓力', motor: true },
   sacral: { name: '薦骨中心', chName: '薦骨', gates: [3, 5, 9, 14, 27, 29, 34, 42, 59], color: '#10b981', desc: '生命力、工作能量、生育力', motor: true },
   spleen: { name: '脾臟中心（直覺）', chName: '脾臟', gates: [18, 28, 32, 44, 48, 50, 57], color: '#84cc16', desc: '直覺本能、健康感知、當下意識', motor: false },
-  root: { name: '根部中心', chName: '根部', gates: [19, 38, 39, 41, 52, 53, 54, 58, 60], color: '#6b7280', desc: '腎上腺素壓力、動力驅動力、演化', motor: true },
+  root: { name: '根部中心', chName: '根部', gates: [19, 38, 39, 41, 52, 53, 54, 58, 60], color: '#b45309', desc: '腎上腺素壓力、動力驅動力、演化', motor: true },
 };
 
 /** 閘門 → 所屬中心 */

@@ -389,3 +389,53 @@ export function generatePairPrompt(pA, pB, cmp) {
 
 請註明每個結論主要來自哪個體系，不要為了湊結論而美化負面訊號。`;
 }
+
+// ───────────────────── 各系統 Prompt（不含角色設定，角色由 SmartReading 指定） ─────────────────────
+export function generateIchingPrompt(p) {
+  const d = p.destiny;
+  const shi = d.linesData.find((l) => l.isShi);
+  return `請為命主【${p.name}】解讀易經六爻終身命卦並提供深刻且具體的人生指引：
+
+【命卦盤面】
+- 四柱八字：${d.meta.pillars}；旬空：${d.meta.kongWang || '無'}
+- 本命卦：${d.hexagrams.original.name}（${d.hexagrams.palace}）；卦辭：${d.hexagrams.original.text}
+- 互卦：${d.hexagrams.nuclear.hex.name}
+- 世爻：${d.hexagrams.shiPosition}；應爻：${d.hexagrams.yingPosition}
+- 六爻：${[...d.linesData].reverse().map((l) => `${l.lineNum}爻${l.bit ? '陽' : '陰'}${l.branch}${l.wuxing}(${l.relation}・${l.beast})${l.isShi ? '【世】' : ''}${l.isYing ? '【應】' : ''}`).join('、')}
+
+【系統算法摘要】
+- 性格：${d.personality.wuxingArchetype.title}。${d.personality.coreMindset}
+- 盲點：${d.personality.blindSpots}
+- 事業：${d.career.roleOrientation}；財運：${d.wealth.wealthPattern}
+- 情感：${d.relationship.shiYingDynamic}
+- 身心：${d.health.organSystem}
+- 開運：${d.luckyKit.color}、數字 ${d.luckyKit.numbers}、方位 ${d.luckyKit.direction}（${shi?.wuxing || ''}行）
+
+請依序解析：
+1. 【命格本質與思維盲區】
+2. 【黃金事業賽道與決策心法】
+3. 【聚財守財與漏財防範】
+4. 【情感與人際相處之道】
+5. 【身心養護與人生座右銘】`;
+}
+
+/** 三師會診：三個角色依序發言，最後融合結論 */
+export function generateFusionPrompt(p) {
+  const full = generateUnifiedPrompt(p);
+  const data = full.slice(0, full.indexOf('【請依下列結構撰寫'));
+  const body = data.replace(/^[^\n]*\n\n/, ''); // 去掉第一句角色說明
+  return `請為【${p.name}】進行一場「三師會診」，綜合易經命卦、紫微斗數、西洋占星與人類圖四套命盤資料。
+
+${body}
+【請依下列結構撰寫（總字數建議五千至八千字）】
+一、☯️ 武當老道論命：以易經命卦與紫微斗數為主，談命格根性、氣運與修身養性之道。
+二、🧠 心理學專家析心：以占星與人類圖為主，談性格結構、情緒與關係模式、陰影與成長練習。
+三、🔮 占卜大師斷語：四套體系交叉印證，點出事業、財富、感情的趨勢、時機與提醒。
+四、🌐 三師合參・交相融合：
+   1. 四套體系「一致指向」的核心特質（列出各體系證據）。
+   2. 彼此「矛盾或不同」之處，以及如何整合。
+   3. 本命最大的天賦、最需修煉的課題各三點。
+   4. 未來十二個月的行動清單（五到七條）與一句座右銘。
+
+每項結論請註明主要依據的體系；體系間說法不同時請明說，不要為了湊結論而美化。`;
+}
