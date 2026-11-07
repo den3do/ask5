@@ -18,6 +18,8 @@ import {
   OPENROUTER_DEFAULT_MODELS,
   getAiConfig,
   saveAiConfig,
+  clearAiKeys,
+  clearAllLocalData,
   testAiConnection
 } from '../utils/aiService';
 
@@ -92,6 +94,19 @@ export default function AiSettingsModal({ isOpen, onClose, onSaved }) {
     onClose();
   };
 
+  const handleClearKeys = () => {
+    clearAiKeys();
+    setGeminiKey('');
+    setOpenrouterKey('');
+    setTestStatus('idle');
+  };
+
+  const handleClearAll = () => {
+    if (!window.confirm('將清除本站在此瀏覽器的所有資料：API 金鑰、AI 設定、已儲存的生辰檔案與字級。此動作無法復原，確定嗎？')) return;
+    clearAllLocalData();
+    window.location.reload();
+  };
+
   // 測試連線
   const handleTestConnection = async () => {
     const currentKey = provider === AI_PROVIDERS.GEMINI ? geminiKey : openrouterKey;
@@ -135,11 +150,11 @@ export default function AiSettingsModal({ isOpen, onClose, onSaved }) {
             <div>
               <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
                 AI 智慧解盤設定
-                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  純前端本地加密儲存 (BYOK)
+                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-300 border border-slate-500/30">
+                  自備金鑰 (BYOK)
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">自備 API Key 串接，不透過任何第三方中轉，安全不外洩</p>
+              <p className="text-xs text-slate-400">金鑰只在你的瀏覽器與所選 AI 服務商之間傳送，本站沒有伺服器、不會收到金鑰；金鑰僅暫存於此分頁</p>
             </div>
           </div>
           <button
@@ -337,6 +352,25 @@ export default function AiSettingsModal({ isOpen, onClose, onSaved }) {
               </div>
             </div>
           )}
+
+          {/* 資安與隱私說明 */}
+          <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs text-slate-400 leading-relaxed">
+            <p>
+              <b className="text-amber-300">金鑰只暫存在這個分頁</b>（關閉分頁即清除），不會寫入長期儲存，每次開啟需重新貼上。建議使用額度有上限的專用金鑰，用完可到服務商後台刪除。
+            </p>
+            <p>
+              <b className="text-amber-300">按下 AI 解讀後，你的命盤資料會送到所選的服務商</b>
+              （{provider === AI_PROVIDERS.GEMINI ? 'Google' : 'OpenRouter 及其轉接的模型供應商'}），內容可能包含生辰、出生地、性別與占問內容。排盤本身不會外傳；不想外傳請勿使用 AI 解讀。
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <button type="button" onClick={handleClearKeys} className="text-red-300 hover:text-red-200 underline">
+                清除 API 金鑰
+              </button>
+              <button type="button" onClick={handleClearAll} className="text-red-300 hover:text-red-200 underline">
+                清除本站所有本機資料（金鑰、設定、已存生辰）
+              </button>
+            </div>
+          </div>
 
           {/* 測試連線回饋結果 */}
           {testStatus !== 'idle' && (

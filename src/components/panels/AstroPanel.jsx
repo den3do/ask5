@@ -2,14 +2,18 @@ import React, { useMemo } from 'react';
 import { Explainer, DarkStage } from '../ui';
 import AstroChart from '../AstroChart';
 import SmartReading from '../SmartReading';
+import LifeStory from '../LifeStory';
+import { buildAstroStory } from '../../utils/lifeReading';
 import { ZODIAC_SIGNS, generateAstrologyAiPrompt } from '../../utils/astrology';
 
-const CX = 210;
-const CY = 210;
-const R_OUT = 198;
-const R_ZOD = 166;
-const R_PLANET = 140;
-const R_ASPECT = 92;
+const CX = 270;
+const CY = 270;
+const R_OUT = 236;
+const R_ZOD = 192;
+const R_PLANET = 160;
+const R_ASPECT = 100;
+const NAMES = { sun: '太陽', moon: '月亮', mercury: '水星', venus: '金星', mars: '火星', jupiter: '木星', saturn: '土星', uranus: '天王星', neptune: '海王星', pluto: '冥王星' };
+const ASP_LEGEND = [['合相', '#f59e0b'], ['六分相', '#3b82f6'], ['三分相', '#10b981'], ['四分相', '#ef4444'], ['對分相', '#8b5cf6']];
 
 const ELEMENT_FILL = { 火: '#7f1d1d', 土: '#78350f', 風: '#0c4a6e', 水: '#1e3a8a' };
 const PLANET_COLOR = {
@@ -40,8 +44,8 @@ function NatalWheel({ chart }) {
     for (let pass = 0; pass < 40; pass++) {
       for (let i = 1; i < list.length; i++) {
         const gap = list[i].disp - list[i - 1].disp;
-        if (gap < 9) {
-          const push = (9 - gap) / 2;
+        if (gap < 12) {
+          const push = (12 - gap) / 2;
           list[i - 1].disp -= push;
           list[i].disp += push;
         }
@@ -53,7 +57,7 @@ function NatalWheel({ chart }) {
   const keyAspects = chart.aspects.filter((a) => a.angle !== 150);
 
   return (
-    <svg viewBox="0 0 420 420" className="w-full max-w-[460px] mx-auto" role="img" aria-label="西洋本命星盤圓盤">
+    <svg viewBox="0 0 540 540" className="w-full max-w-[560px] mx-auto" role="img" aria-label="西洋本命星盤圓盤">
       <defs>
         <radialGradient id="wheelBg" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#1e1b4b" />
@@ -68,8 +72,8 @@ function NatalWheel({ chart }) {
         const [sx, sy] = pt((R_OUT + R_ZOD) / 2, a + 15);
         return (
           <g key={z.name}>
-            <polygon points={arc(R_ZOD, R_OUT, a, a + 30)} fill={ELEMENT_FILL[z.element]} fillOpacity="0.55" stroke="#475569" strokeWidth="0.6" />
-            <text x={sx} y={sy} textAnchor="middle" dominantBaseline="central" fontSize="15" fill="#f1f5f9">{z.symbol}{TEXT}</text>
+            <polygon points={arc(R_ZOD, R_OUT, a, a + 30)} fill={ELEMENT_FILL[z.element]} fillOpacity="0.75" stroke="#64748b" strokeWidth="1" />
+            <text x={sx} y={sy} textAnchor="middle" dominantBaseline="central" fontSize="24" fill="#f8fafc">{z.symbol}{TEXT}</text>
           </g>
         );
       })}
@@ -80,11 +84,11 @@ function NatalWheel({ chart }) {
         const start = Math.floor(asc / 30) * 30 + i * 30;
         const [x1, y1] = pt(R_ASPECT + 6, start);
         const [x2, y2] = pt(R_ZOD, start);
-        const [hx, hy] = pt(R_ASPECT + 18, start + 15);
+        const [hx, hy] = pt(R_ASPECT + 13, start + 15);
         return (
           <g key={i}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#475569" strokeWidth="0.5" />
-            <text x={hx} y={hy} textAnchor="middle" dominantBaseline="central" fontSize="8" fill="#94a3b8">{i + 1}</text>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#64748b" strokeWidth="0.8" />
+            <text x={hx} y={hy} textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="700" fill="#cbd5e1">{i + 1}</text>
           </g>
         );
       })}
@@ -97,15 +101,15 @@ function NatalWheel({ chart }) {
         return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#fbbf24" strokeOpacity="0.45" strokeWidth="1" strokeDasharray="4 3" />;
       })}
       {[['AC', asc], ['MC', chart.mc.lon]].map(([label, lon]) => {
-        const [x, y] = pt(R_OUT + 14, lon);
-        return <text key={label} x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="700" fill="#fbbf24">{label}</text>;
+        const [x, y] = pt(R_OUT + 18, lon);
+        return <text key={label} x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize="15" fontWeight="800" fill="#fbbf24">{label}</text>;
       })}
 
       {/* 相位線 */}
       {keyAspects.map((a, i) => {
         const [x1, y1] = pt(R_ASPECT, chart.positions[a.planet1].lon);
         const [x2, y2] = pt(R_ASPECT, chart.positions[a.planet2].lon);
-        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={a.color} strokeOpacity={a.nature === 'major' ? 0.75 : 0.4} strokeWidth={a.nature === 'major' ? 1.2 : 0.7} />;
+        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={a.color} strokeOpacity={a.nature === 'major' ? 0.9 : 0.55} strokeWidth={a.nature === 'major' ? 1.8 : 1} />;
       })}
 
       {/* 行星 */}
@@ -114,12 +118,12 @@ function NatalWheel({ chart }) {
         const [tx2, ty2] = pt(R_ZOD - 6, p.lon);
         const [gx, gy] = pt(R_PLANET, p.disp);
         const deg = Math.floor(chart.positions[p.id].sign.degree);
-        const [dx, dy] = pt(R_PLANET - 19, p.disp);
+        const [dx, dy] = pt(R_PLANET - 31, p.disp);
         return (
           <g key={p.id}>
-            <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke={PLANET_COLOR[p.id]} strokeWidth="1.4" />
-            <text x={gx} y={gy} textAnchor="middle" dominantBaseline="central" fontSize="17" fill={PLANET_COLOR[p.id]}>{GLYPH[p.id]}{TEXT}</text>
-            <text x={dx} y={dy} textAnchor="middle" dominantBaseline="central" fontSize="8" fill="#94a3b8">{deg}°</text>
+            <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke={PLANET_COLOR[p.id]} strokeWidth="2" />
+            <text x={gx} y={gy} textAnchor="middle" dominantBaseline="central" fontSize="27" fontWeight="700" fill={PLANET_COLOR[p.id]}>{GLYPH[p.id]}{TEXT}</text>
+            <text x={dx} y={dy} textAnchor="middle" dominantBaseline="central" fontSize="12" fontWeight="700" fill="#e2e8f0">{deg}°</text>
           </g>
         );
       })}
@@ -137,12 +141,41 @@ export default function AstroPanel({ profile, onOpenSettings }) {
         <p>本站採<b>整宮制</b>宮位，行星位置使用 VSOP87 星曆計算，精度遠高於一般日常需求。</p>
       </Explainer>
 
+      {(chart.warnings || []).length > 0 && (
+        <ul className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 font-sans">
+          {chart.warnings.map((w, i) => <li key={i}>⚠ {w}</li>)}
+          <li>宮位制：{chart.houseSystem}。</li>
+        </ul>
+      )}
+
       <DarkStage>
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-          <div className="lg:col-span-2"><NatalWheel chart={chart} /></div>
-          <div className="lg:col-span-3"><AstroChart chart={chart} personName={profile.name} /></div>
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
+            <div className="lg:col-span-3"><NatalWheel chart={chart} /></div>
+            <div className="lg:col-span-2 bg-slate-900/70 border border-slate-700 rounded-xl p-4 text-sm text-slate-200 font-sans space-y-3">
+              <div className="font-bold text-amber-300">行星位置對照</div>
+              <div className="grid grid-cols-1 gap-y-1.5">
+                {Object.keys(GLYPH).map((id) => (
+                  <div key={id} className="flex items-center gap-2">
+                    <span className="text-2xl w-8 text-center" style={{ color: PLANET_COLOR[id] }}>{GLYPH[id]}{TEXT}</span>
+                    <span className="w-16 font-bold">{NAMES[id]}</span>
+                    <span className="text-slate-300">{chart.positions[id].sign.name} {Math.floor(chart.positions[id].sign.degree)}°・第 {chart.positions[id].house} 宮</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-3 border-t border-slate-700 text-xs">
+                {ASP_LEGEND.map(([n, c]) => (
+                  <span key={n} className="flex items-center gap-1.5"><i className="inline-block w-6 h-1 rounded" style={{ background: c }} />{n}</span>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 leading-6">外環＝十二星座（火紅、土褐、風藍、水深藍）；圈內數字＝宮位；AC＝上升、MC＝天頂；行星旁數字＝在星座內的度數。</p>
+            </div>
+          </div>
+          <AstroChart chart={chart} personName={profile.name} />
         </div>
       </DarkStage>
+
+      <LifeStory story={buildAstroStory(chart)} title="西洋占星・一生詳述" />
 
       <SmartReading systemKey="astro" prompt={generateAstrologyAiPrompt(chart, profile.name)} onOpenSettings={onOpenSettings} />
     </div>

@@ -16,16 +16,45 @@ import {
 import { 
   solarToLunar, lunarToSolar, calculatePillars, calculateDestinyHexNumbers 
 } from './utils/lunar';
+import { chineseClock } from './utils/chineseTime';
 import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
 import PersonalHub from './components/PersonalHub';
 import SynastryReport from './components/SynastryReport';
+
+const GLOSSARY = [
+  ['用神', '代表你所問的那件事的那一爻（問財運看妻財、問工作看官鬼…），是整個卦的主角。'],
+  ['世爻 / 應爻', '世＝你自己；應＝對方或外在環境。'],
+  ['動爻', '起卦時被選中「發動」的那一爻，代表事情變化的關鍵。'],
+  ['本卦 / 互卦 / 變卦', '本卦＝現況；互卦＝中途過程；變卦＝最後的走向。'],
+  ['六親（妻財、官鬼、父母、子孫、兄弟）', '把事情分成五種角色：財、官與壓力、文書與長輩、子女與福氣、同儕與競爭者。'],
+  ['六神', '青龍、朱雀、勾陳、螣蛇、白虎、玄武，是每一爻附帶的性格標籤，僅供參考。'],
+  ['旬空（空亡）', '這一爻暫時「放空」使不上力，過一段時間出空後才有作用。'],
+  ['月破 / 日破', '這一爻被當月或當天的力量正面沖散，狀態比較差。'],
+  ['旺 / 相 / 休 / 囚 / 死', '這一爻在當月得到多少助力：旺最強、死最弱。'],
+  ['回頭生 / 回頭剋', '動爻變化之後，是回過頭來幫助原本的爻（好），還是反過來傷害它（差）。'],
+  ['進神 / 退神', '動爻變化後氣勢是在增強（進）還是衰退（退）。'],
+  ['卦氣評分', '本站自訂的加減分估算，只用來排序「吉凶互見」的程度，不是傳統斷語。'],
+];
 
 const DivinationApp = () => {
   // 當前功能 Tab：1=一事一占, 2=個人命理（命卦/紫微/人類圖/西洋/融合）, 3=雙人合盤
   const [activeTab, setActiveTab] = useState(1);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // 使用者字體大小（縮放根字級，所有 rem 單位連動）
+  const FONT_STEPS = [14, 16, 18, 20, 22, 24];
+  const [fontIdx, setFontIdx] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem('ask5_font_idx'), 10);
+      return v >= 0 && v < FONT_STEPS.length ? v : 1;
+    } catch { return 1; }
+  });
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${FONT_STEPS[fontIdx]}px`;
+    try { localStorage.setItem('ask5_font_idx', String(fontIdx)); } catch { /* ignore */ }
+  }, [fontIdx]);
 
   const TABS = [
     { id: 1, label: '一事一占', Icon: Sparkles },
@@ -38,12 +67,24 @@ const DivinationApp = () => {
   // -------------------------------------------------------------
   const [divInputs, setDivInputs] = useState({ num1: '', num2: '', num3: '' });
   const [divQuestion, setDivQuestion] = useState('');
-  const [divDateStr, setDivDateStr] = useState(new Date().toISOString().split('T')[0]);
+  // 注意：不可用 toISOString()（UTC 日期，在 UTC+8 凌晨會差一天），改用本地日期
+  const [divDateStr, setDivDateStr] = useState(() => {
+    const n = new Date();
+    const c = chineseClock(n.getFullYear(), n.getMonth() + 1, n.getDate(), n.getHours()); // 23:00 後為次日子時
+    return `${c.year}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
+  });
   const [divHourIdx, setDivHourIdx] = useState(
     new Date().getHours() >= 23 ? 0 : Math.ceil(new Date().getHours() / 2) % 12
   );
   const [divTopic, setDivTopic] = useState('財運');
+  const [divGender, setDivGender] = useState('男'); // 感情／婚姻：男看妻財、女看官鬼
   const [divResult, setDivResult] = useState(null);
+  const [divError, setDivError] = useState('');
+  const randomizeNumbers = () => {
+    const r = () => String(1 + Math.floor(Math.random() * 99));
+    setDivInputs({ num1: r(), num2: r(), num3: r() });
+    setDivError('');
+  };
   const [aiPromptText, setAiPromptText] = useState('');
   const [copiedText, setCopiedText] = useState('');
 
@@ -62,9 +103,10 @@ const DivinationApp = () => {
     const n3 = parseInt(divInputs.num3, 10);
 
     if (isNaN(n1) || isNaN(n2) || isNaN(n3)) {
-      alert("請輸入三個起卦數字（例如：3, 4, 5）");
+      setDivError('請把三個數字都填好（例如：3、4、5）。想不到數字？按旁邊的「隨機起卦」即可。');
       return;
     }
+    setDivError('');
 
     // 上卦、下卦、動爻
     let uNum = n1 % 8;
@@ -174,7 +216,9 @@ const DivinationApp = () => {
       palaceWuxing: palaceInfo.palaceWuxing,
       originalHex: hexInfo,
       changedHex: newHexInfo,
-      nuclearHex: nuclearInfo
+      nuclearHex: nuclearInfo,
+      gender: divGender,
+      palaceId: palaceInfo.palaceId,
     });
 
     const linesWithYongShen = linesData.map(l => ({
@@ -235,10 +279,6 @@ const DivinationApp = () => {
 【六爻全盤】：
 ${linesStr}
 
-【系統評分與斷語參考】：
-- 綜合評定：【${evaluation.level}】 (卦氣評分：${evaluation.score}分)
-- 評語：${evaluation.fullCommentary}
-
 請依據本卦、互卦、變卦之五行生剋、回頭生剋、神煞與用神旺衰，詳細為我解析：
 1. 當前局勢瓶頸與核心癥結。
 2. 事情中期的轉折與發展。
@@ -253,9 +293,13 @@ ${linesStr}
     setMenuOpen(false);
   };
 
-  const copyToClipboard = (text, message = '已複製到剪貼簿！') => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(message);
+  const copyToClipboard = async (text, message = '已複製到剪貼簿！') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedText(message);
+    } catch {
+      setCopiedText('無法自動複製，請手動選取文字複製');
+    }
     setTimeout(() => setCopiedText(''), 2500);
   };
 
@@ -278,6 +322,25 @@ ${linesStr}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center rounded-lg border border-stone-600 bg-stone-800 font-sans" role="group" aria-label="字體大小">
+                <button
+                  type="button"
+                  onClick={() => setFontIdx((i) => Math.max(0, i - 1))}
+                  disabled={fontIdx === 0}
+                  className="px-2.5 py-2.5 text-stone-200 text-xs font-bold disabled:opacity-30 hover:text-amber-300"
+                  aria-label="縮小字體"
+                  title="縮小字體"
+                >A−</button>
+                <span className="text-[11px] text-stone-400 w-9 text-center tabular-nums">{FONT_STEPS[fontIdx]}px</span>
+                <button
+                  type="button"
+                  onClick={() => setFontIdx((i) => Math.min(FONT_STEPS.length - 1, i + 1))}
+                  disabled={fontIdx === FONT_STEPS.length - 1}
+                  className="px-2.5 py-2.5 text-stone-200 text-base font-bold disabled:opacity-30 hover:text-amber-300"
+                  aria-label="放大字體"
+                  title="放大字體"
+                >A+</button>
+              </div>
               <button
                 onClick={() => setIsAiModalOpen(true)}
                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-amber-500/40 bg-stone-800 hover:border-amber-400 text-amber-300 hover:text-amber-200 text-sm font-bold shadow-md transition"
@@ -413,6 +476,16 @@ ${linesStr}
                     <option value="子女">子女/福氣/解憂（以子孫為用神）</option>
                     <option value="合夥">合夥/合作/競爭（以兄弟為用神）</option>
                   </select>
+                  {divTopic === '感情' && (
+                    <div className="mt-2 flex items-center gap-3 text-xs font-bold text-stone-600">
+                      <span>求測者性別：</span>
+                      {['男', '女'].map((g) => (
+                        <label key={g} className="flex items-center gap-1 cursor-pointer">
+                          <input type="radio" name="divGender" checked={divGender === g} onChange={() => setDivGender(g)} />{g}（{g === '男' ? '妻財' : '官鬼'}為用神）
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 當前四柱速覽 */}
@@ -473,6 +546,14 @@ ${linesStr}
                     />
 
                     <button
+                      type="button"
+                      onClick={randomizeNumbers}
+                      className="px-4 py-3 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-sm font-bold"
+                    >
+                      隨機起卦
+                    </button>
+
+                    <button
                       onClick={handleDivinationCalculate}
                       className="ml-auto bg-stone-900 hover:bg-stone-800 text-amber-400 border border-amber-600 px-8 py-3 rounded-lg font-bold text-base shadow hover:shadow-md transition-all flex items-center gap-2"
                     >
@@ -480,6 +561,11 @@ ${linesStr}
                       起卦排盤 ‧ 吉凶推斷
                     </button>
                   </div>
+                  {divError && (
+                    <div role="alert" className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm font-sans">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />{divError}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -516,8 +602,16 @@ ${linesStr}
                     </div>
                   </div>
 
+                  {/* 一句話白話結論 */}
+                  <div className="px-6 pt-5 bg-stone-50 border-t border-stone-200">
+                    <div className="bg-amber-50 border-l-4 border-amber-600 rounded-r-lg p-4 text-sm text-stone-800 leading-relaxed">
+                      <strong className="text-amber-900">一句話看結果：</strong>
+                      {divResult.evaluation.summary}{divResult.evaluation.advice}
+                    </div>
+                  </div>
+
                   {/* 斷卦白話詳細評語 */}
-                  <div className="p-6 bg-stone-50 border-t border-stone-200 space-y-4">
+                  <div className="p-6 bg-stone-50 space-y-4">
                     <h4 className="font-bold text-stone-900 text-base flex items-center gap-2">
                       <Flame className="w-4 h-4 text-amber-600" />
                       白話文綜合斷語與行動建議
@@ -563,6 +657,16 @@ ${linesStr}
                   </div>
                 </div>
 
+                {/* 名詞白話對照 */}
+                <details className="bg-white rounded-xl shadow border border-stone-200 p-5 font-sans text-sm text-stone-700">
+                  <summary className="cursor-pointer font-bold text-stone-800">看不懂術語？名詞白話對照（點開）</summary>
+                  <dl className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs leading-relaxed">
+                    {GLOSSARY.map(([k, v]) => (
+                      <div key={k}><dt className="inline font-bold text-stone-900">{k}：</dt><dd className="inline">{v}</dd></div>
+                    ))}
+                  </dl>
+                </details>
+
                 {/* 六爻詳細納甲盤面表格 */}
                 <div className="bg-white rounded-xl shadow border border-stone-200 overflow-hidden">
                   <div className="bg-stone-100 px-6 py-3 border-b border-stone-200 flex items-center justify-between">
@@ -572,16 +676,30 @@ ${linesStr}
                     </span>
                   </div>
 
+                  {/* 起卦時間四柱：供看卦者解卦 */}
+                  <div className="px-6 py-3 border-b border-stone-200 bg-amber-50/50 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                    <span className="text-xs text-stone-500">起卦時間</span>
+                    {[['年', divResult.pillars.year], ['月', divResult.pillars.month], ['日', divResult.pillars.day], ['時', divResult.pillars.hour]].map(([k, v]) => (
+                      <span key={k} className="text-stone-600">
+                        <strong className="text-stone-900 text-base tracking-wider">{v}</strong>
+                        <span className="text-xs ml-0.5">{k}</span>
+                      </span>
+                    ))}
+                    <span className="text-xs text-stone-600">旬空：<strong className="text-amber-700">{divResult.pillars.kongWang.join('、') || '無'}</strong></span>
+                    <span className="text-xs text-stone-600">月破：<strong className="text-rose-600">{divResult.pillars.yuePoBranch}</strong></span>
+                    <span className="text-xs text-stone-600">日破：<strong className="text-purple-600">{divResult.pillars.riPoBranch}</strong></span>
+                  </div>
+
                   <div className="overflow-x-auto p-4">
                     <table className="w-full text-left text-sm border-collapse min-w-[640px]">
                       <thead>
                         <tr className="border-b border-stone-200 text-xs text-stone-500">
-                          <th className="py-2 px-3">六神</th>
-                          <th className="py-2 px-3">六親標註</th>
-                          <th className="py-2 px-3">本卦爻象</th>
-                          <th className="py-2 px-3">干支五行</th>
-                          <th className="py-2 px-3 text-center">卦爻符號 (本 ➔ 變)</th>
-                          <th className="py-2 px-3">動變與回頭作用</th>
+                          <th className="py-2 px-3" title="每一爻附帶的性格標籤">六神</th>
+                          <th className="py-2 px-3" title="這一爻代表的角色：財、官、父母、子孫、兄弟；世＝你、應＝對方">六親標註</th>
+                          <th className="py-2 px-3" title="第幾爻，陽＝實線、陰＝斷線">本卦爻象</th>
+                          <th className="py-2 px-3" title="這一爻對應的地支與五行">干支五行</th>
+                          <th className="py-2 px-3 text-center" title="左邊是現況，右邊是變化後">卦爻符號 (本 ➔ 變)</th>
+                          <th className="py-2 px-3" title="只有動爻會變化；安靜＝不變">動變與回頭作用</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">

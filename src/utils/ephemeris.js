@@ -115,14 +115,34 @@ export function ascendantAndMc(date, lat, lon) {
   return { asc, mc, ramc, eps };
 }
 
-/** 真太陽時（小時，0~24）：地方平時加均時差 */
+/**
+ * 均時差（分鐘，視太陽時 − 平太陽時）。Spencer 級數，誤差約 ±30 秒。
+ * @param {Date} date UTC 時刻
+ */
+export function equationOfTimeMinutes(date) {
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const n = (date.getTime() - yearStart) / 86400000; // 0-based 年內日數（含小數）
+  const B = (2 * Math.PI * n) / 365;
+  return 229.18 * (0.000075 + 0.001868 * Math.cos(B) - 0.032077 * Math.sin(B)
+    - 0.014615 * Math.cos(2 * B) - 0.040849 * Math.sin(2 * B));
+}
+
+/**
+ * 真太陽時：由絕對 UTC 時刻與出生地經度推得（地方平時＋均時差）。
+ * 回傳以「偽 UTC」表示的當地真太陽時，可用 getUTC* 讀取年月日時分。
+ */
+export function trueSolarFromUtc(utcDate, lon) {
+  const eot = equationOfTimeMinutes(utcDate);
+  const lmtOffset = lon * 4; // 相對 UTC 的地方平時差（分鐘）
+  const solar = new Date(utcDate.getTime() + (lmtOffset + eot) * 60000);
+  return { solar, eot, lmtOffset };
+}
+
+/** 真太陽時（顯示用）；tz 為出生當時與 UTC 的時差（小時） */
 export function trueSolarTime({ year, month, day, hour = 12, minute = 0, lon, tz }) {
-  const start = Date.UTC(year, 0, 0);
-  const n = Math.floor((Date.UTC(year, month - 1, day) - start) / 86400000);
-  const B = rad((360 / 365) * (n - 81));
-  const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B); // 分鐘
-  const lmtOffset = (lon - tz * 15) * 4; // 分鐘
-  let minutes = hour * 60 + minute + lmtOffset + eot;
-  minutes = ((minutes % 1440) + 1440) % 1440;
-  return { minutes, hour: Math.floor(minutes / 60), minute: Math.round(minutes % 60), eot, lmtOffset };
+  const utc = localToUtcDate({ year, month, day, hour, minute, tz });
+  const { solar, eot } = trueSolarFromUtc(utc, lon);
+  const lmtOffset = (lon - tz * 15) * 4; // 相對標準時區中央經線的差（分鐘）
+  const minutes = solar.getUTCHours() * 60 + solar.getUTCMinutes() + solar.getUTCSeconds() / 60;
+  return { minutes, hour: solar.getUTCHours(), minute: solar.getUTCMinutes(), eot, lmtOffset, solar };
 }

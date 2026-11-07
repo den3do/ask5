@@ -12,7 +12,8 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { getAiConfig, streamAiCompletion, AI_PROVIDERS } from '../utils/aiService';
+import { getAiConfig, streamAiCompletion, AI_PROVIDERS, AI_READING_GUARD } from '../utils/aiService';
+import CopyPromptButton from './CopyPromptButton';
 
 export default function AiAnalysisSection({
   title = 'AI 大師深度解讀',
@@ -66,7 +67,7 @@ export default function AiAnalysisSection({
 
     try {
       const messages = [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: `${systemPrompt}\n\n${AI_READING_GUARD}` },
         { role: 'user', content: prompt },
       ];
 
@@ -174,14 +175,17 @@ export default function AiAnalysisSection({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleStartAnalysis}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 shrink-0"
-            >
-              <Sparkles className="w-4 h-4" />
-              {config.activeKey ? '開始 AI 深度解卦' : '⚙️ 設定 API Key 並開始'}
-            </button>
+            <div className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
+              <button
+                type="button"
+                onClick={handleStartAnalysis}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                {config.activeKey ? '開始 AI 深度解卦' : '⚙️ 設定 API Key 並開始'}
+              </button>
+              <CopyPromptButton systemPrompt={systemPrompt} prompt={prompt} className="w-full sm:w-auto" />
+            </div>
           </div>
         )}
 

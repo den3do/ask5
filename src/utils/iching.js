@@ -226,9 +226,11 @@ export const evaluateDivination = ({
   palaceWuxing,
   originalHex,
   changedHex,
-  nuclearHex
+  nuclearHex,
+  gender = '男',
+  palaceId = null,
 }) => {
-  const yongShenInfo = getTopicYongShen(topic);
+  const yongShenInfo = getTopicYongShen(topic, gender);
   const targetRelation = yongShenInfo.relation;
 
   // 1. 抓出用神爻與世爻
@@ -236,16 +238,55 @@ export const evaluateDivination = ({
   const yingLine = linesData.find(l => l.isYing);
   const movingLineData = linesData.find(l => l.isMoving);
 
-  // 用神爻（若有多個取旺相或動者，若無則暫取世爻或相應位置）
-  let yongShenLine = linesData.find(l => l.relation === targetRelation && l.isMoving) 
-    || linesData.find(l => l.relation === targetRelation && l.isShi)
-    || linesData.find(l => l.relation === targetRelation)
-    || shiLine;
-
   let totalScore = 0;
   const reasons = [];
   const warnings = [];
   const strengths = [];
+
+  // 旬空的實際效力：動爻不空、月建所臨不空；日辰沖之為「沖空」（出空而實）
+  const effectiveKong = (l) => l.isKongWang && !l.isMoving && l.branch !== pillars.monthBranch
+    && !(checkBranchInteraction(l.branch, pillars.dayBranch) === '六沖');
+  // 單爻強弱（用於用神多現時擇優）：月令旺衰＋日辰生扶，扣月破、空亡
+  const strengthOf = (l) => {
+    let s = getWuxingWangShuai(l.wuxing, pillars.monthBranch).score;
+    const rel = WUXING_RELATION[BRANCH_WUXING[pillars.dayBranch]]?.[l.wuxing];
+    s += rel === '生' ? 2 : rel === '比和' ? 1 : rel === '剋' ? -2 : 0;
+    if (l.branch === pillars.yuePoBranch) s -= 6;
+    if (effectiveKong(l)) s -= 5;
+    return s;
+  };
+
+  const candidates = linesData.filter(l => l.relation === targetRelation);
+  let yongShenLine;
+  if (candidates.length === 1) {
+    yongShenLine = candidates[0];
+  } else if (candidates.length > 1) {
+    // 用神多現：動爻優先（發動者為取用對象）；其餘比較旺衰，持世者同分時優先
+    const movers = candidates.filter(l => l.isMoving);
+    const pool = movers.length ? movers : candidates;
+    yongShenLine = [...pool].sort((a, b) => (strengthOf(b) + (b.isShi ? 0.5 : 0)) - (strengthOf(a) + (a.isShi ? 0.5 : 0)))[0];
+    warnings.push(`卦中【${yongShenInfo.name}】共現 ${candidates.length} 爻（用神多現），已${movers.length ? '以發動者' : '比較月令、日辰旺衰後'}取第 ${yongShenLine.lineNum} 爻為用神；傳統另有「取其旺者」以外的取法，僅供參考。`);
+  } else {
+    // 用神不現：查伏神（本宮八純卦同位之爻），伏於飛神之下
+    const pure = palaceId != null ? NAJIA_TABLE[palaceId] : null;
+    const pureBranches = pure ? [...pure.inner, ...pure.outer] : [];
+    const idx = pureBranches.findIndex((b) => getRelation(palaceWuxing, BRANCH_WUXING[b]) === targetRelation);
+    if (idx >= 0) {
+      const fly = linesData[idx];
+      const b = pureBranches[idx];
+      yongShenLine = {
+        lineNum: idx + 1, branch: b, wuxing: BRANCH_WUXING[b], relation: targetRelation,
+        isKongWang: pillars.kongWang.includes(b), isMoving: false, isShi: false, isFu: true, fly,
+      };
+      warnings.push(`卦中【${yongShenInfo.name}】不現，取伏神：${b}${yongShenLine.wuxing}伏於第 ${idx + 1} 爻飛神（${fly.branch}${fly.wuxing}）之下，須待飛神被沖、被剋或空破才易引出，力量較用神現身為弱。`);
+      const f = WUXING_RELATION[fly.wuxing]?.[yongShenLine.wuxing];
+      if (f === '生') { totalScore += 1; strengths.push('飛神生伏神，伏藏之用神得助'); }
+      else if (f === '剋') { totalScore -= 2; warnings.push('飛神剋伏神，伏藏之用神受制難出'); }
+    } else {
+      yongShenLine = shiLine;
+      warnings.push(`卦中【${yongShenInfo.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
+    }
+  }
 
   // (1) 用神月建旺衰
   const ysMonthStatus = getWuxingWangShuai(yongShenLine.wuxing, pillars.monthBranch);
@@ -274,26 +315,29 @@ export const evaluateDivination = ({
   const isYsYuePo = yongShenLine.branch === pillars.yuePoBranch;
   if (isYsYuePo) {
     totalScore -= 6;
-    warnings.push(`用神逢【月破】(與月建六沖)，猶如枯木逢暴風，目前處於最被動虛弱之時`);
+    warnings.push(`用神逢【月破】（白話：這一爻被當月的力量正面沖散），猶如枯木逢暴風，目前處於最被動虛弱之時`);
   }
 
   // 日破判定
   const isYsRiPo = yongShenLine.branch === pillars.riPoBranch && !yongShenLine.isMoving;
   if (isYsRiPo) {
     totalScore -= 3;
-    warnings.push(`用神安靜受日沖為【日破】，主心浮氣躁或事有破敗`);
+    warnings.push(`用神安靜受日沖為【日破】（白話：這一爻被當天的力量沖到），主心浮氣躁或事有破敗`);
   }
 
   // 旬空判定
-  if (yongShenLine.isKongWang) {
+  if (yongShenLine.isKongWang && !effectiveKong(yongShenLine)) {
+    warnings.push(`用神雖逢旬空，但${yongShenLine.isMoving ? '動爻不作空論' : yongShenLine.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
+  }
+  if (effectiveKong(yongShenLine)) {
     totalScore -= 5;
-    warnings.push(`用神【落空亡】，代表你所追求的事情目前空中樓閣，暫時如捕風捉影`);
+    warnings.push(`用神【落空亡】（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
   }
 
   // 世爻旬空
-  if (shiLine.isKongWang) {
+  if (effectiveKong(shiLine)) {
     totalScore -= 4;
-    warnings.push(`世爻自己【落空亡】，表示你當下心無著落、猶豫不決，或自顧不暇有心無力`);
+    warnings.push(`世爻（代表你自己）【落空亡】，表示你當下心無著落、猶豫不決，或自顧不暇有心無力`);
   }
 
   // (3) 世爻旺衰與用神關係
@@ -304,7 +348,10 @@ export const evaluateDivination = ({
   const ysToShiRelation = WUXING_RELATION[yongShenLine.wuxing][shiLine.wuxing]; // 用神對世爻
   if (shiLine.relation === targetRelation) {
     totalScore += 5;
-    strengths.push(`【${yongShenInfo.name}持世】，求事在己，福氣主動歸於自身，大吉之兆！`);
+    const yongWeak = yongShenLine.isKongWang || isYsYuePo || ysMonthStatus.score < 0;
+    strengths.push(yongWeak
+      ? `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），主動權在你手上；但這一爻本身力量不足（見不利之處），需等時機補強`
+      : `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），求事在己，主動權在你手上，是有利的格局`);
   } else if (ysToShiRelation === '生') {
     totalScore += 4;
     strengths.push(`用神生世爻（求事生我），代表好處、成果主動送上門，得來輕鬆不費力`);
@@ -418,11 +465,21 @@ export const evaluateDivination = ({
   }
 
   // 組合生動通順的白話文評語
+  const clean = (s) => s.replace(/[！!。；\s]+$/, '');
+  const mixed = strengths.length > 0 && warnings.length > 0;
+  const summary = mixed
+    ? `這一卦「吉凶互見」：有 ${strengths.length} 項有利、${warnings.length} 項不利，兩邊相抵後${totalScore >= 2 ? '仍偏向有利' : totalScore <= -2 ? '整體偏向不利' : '大致持平'}（總分 ${totalScore}），請連同下方細項一起看，不要只看標題。`
+    : strengths.length > 0
+      ? `這一卦以有利因素為主（${strengths.length} 項有利、無明顯不利）。`
+      : warnings.length > 0
+        ? `這一卦以不利因素為主（${warnings.length} 項不利、無明顯有利）。`
+        : '這一卦沒有明顯的有利或不利因素。';
   const commentaryParts = [
     `【斷語結論】：占問【${topic}】，全卦總結為【${level}】之象（綜合卦氣得分：${totalScore}分）。`,
-    `【時局氣候】：${strengths.length > 0 ? strengths.join('；') + '。' : '目前時機平平，未見顯著外力加持。'}`,
-    warnings.length > 0 ? `【風險警示】：${warnings.join('；')}。` : '【風險警示】：盤面未見重大沖煞剋害，外部阻力較輕。',
-    `【應對錦囊】：${advice}`
+    `【怎麼讀這個結果】：${summary}`,
+    `【有利之處】：${strengths.length > 0 ? strengths.map(clean).join('；') + '。' : '目前時機平平，未見顯著外力加持。'}`,
+    warnings.length > 0 ? `【不利之處】：${warnings.map(clean).join('；')}。` : '【不利之處】：盤面未見重大沖煞剋害，外部阻力較輕。',
+    `【建議】：${advice}`
   ];
 
   const fullCommentary = commentaryParts.join('\n\n');
@@ -434,6 +491,8 @@ export const evaluateDivination = ({
     strengths,
     warnings,
     advice,
+    summary,
+    mixed,
     fullCommentary,
     yongShen: {
       name: yongShenInfo.name,
@@ -635,6 +694,8 @@ export const generateCompatibilityReport = ({
   personA, // { name, birthday, destinyReport, shiLine, palaceInfo, hexName }
   personB
 }) => {
+  const nA = personA.name || '甲方';
+  const nB = personB.name || '乙方';
   const shiA = personA.shiLine;
   const shiB = personB.shiLine;
   const wuxingA = shiA.wuxing;
@@ -655,24 +716,24 @@ export const generateCompatibilityReport = ({
     synergyPoints.push(`同五行思維同頻，容易理解對方的喜怒哀樂，溝通障礙少`);
   } else if (relationAtoB === '生') {
     baseScore += 12;
-    dynamicSummary = `【相生相惜 ‧ A方包容】：甲方(${wuxingA})五行生助乙方(${wuxingB})，甲方天然願意對乙方付出、照護與體貼，關係溫潤有情。`;
-    synergyPoints.push(`甲方在互動中具備長輩或守護者般的包容心，樂於支持乙方的夢想`);
-    frictionPoints.push(`甲方若長期單向付出得不到足夠情緒回饋，可能積累委屈心結`);
+    dynamicSummary = `【相生相惜 ‧ ${nA}包容】：${nA}(${wuxingA})五行生助${nB}(${wuxingB})，${nA}天然願意對${nB}付出、照護與體貼，關係溫潤有情。`;
+    synergyPoints.push(`${nA}在互動中具備長輩或守護者般的包容心，樂於支持${nB}的夢想`);
+    frictionPoints.push(`${nA}若長期單向付出得不到足夠情緒回饋，可能積累委屈心結`);
   } else if (relationBtoA === '生') {
     baseScore += 12;
-    dynamicSummary = `【相生相惜 ‧ B方照拂】：乙方(${wuxingB})五行生助甲方(${wuxingA})，乙方在日常中對甲方呵護備至，常給予實質或情緒依靠。`;
-    synergyPoints.push(`乙方能理解接納甲方的脾性，常主動替甲方分憂解勞`);
-    frictionPoints.push(`乙方偶爾可能感到管得太寬或操心過度，甲方需常表達感謝`);
+    dynamicSummary = `【相生相惜 ‧ ${nB}照拂】：${nB}(${wuxingB})五行生助${nA}(${wuxingA})，${nB}在日常中對${nA}呵護備至，常給予實質或情緒依靠。`;
+    synergyPoints.push(`${nB}能理解接納${nA}的脾性，常主動替${nA}分憂解勞`);
+    frictionPoints.push(`${nB}偶爾可能感到管得太寬或操心過度，${nA}需常表達感謝`);
   } else if (relationAtoB === '剋') {
     baseScore -= 6;
-    dynamicSummary = `【生剋激盪 ‧ A方主導】：甲方(${wuxingA})五行剋制乙方(${wuxingB})，甲方在關鍵決定或氣場上容易佔上風，乙方需多被尊重。`;
-    frictionPoints.push(`甲方言詞或要求容易過於直接嚴厲，讓乙方感到壓力或被控制`);
-    synergyPoints.push(`甲方能為團隊或家庭掌舵定向，推動目標快速落實`);
+    dynamicSummary = `【生剋激盪 ‧ ${nA}主導】：${nA}(${wuxingA})五行剋制${nB}(${wuxingB})，${nA}在關鍵決定或氣場上容易佔上風，${nB}需多被尊重。`;
+    frictionPoints.push(`${nA}言詞或要求容易過於直接嚴厲，讓${nB}感到壓力或被控制`);
+    synergyPoints.push(`${nA}能為團隊或家庭掌舵定向，推動目標快速落實`);
   } else {
     baseScore -= 6;
-    dynamicSummary = `【生剋激盪 ‧ B方主導】：乙方(${wuxingB})五行剋制甲方(${wuxingA})，乙方性格更具決斷力與管束力，甲方偶有壓迫感。`;
-    frictionPoints.push(`乙方容易就細節要求嚴格，甲方若覺自尊受損易引發冷戰`);
-    synergyPoints.push(`乙方的理性分析能有效補足甲方的盲點，避免重大失誤`);
+    dynamicSummary = `【生剋激盪 ‧ ${nB}主導】：${nB}(${wuxingB})五行剋制${nA}(${wuxingA})，${nB}性格更具決斷力與管束力，${nA}偶有壓迫感。`;
+    frictionPoints.push(`${nB}容易就細節要求嚴格，${nA}若覺自尊受損易引發冷戰`);
+    synergyPoints.push(`${nB}的理性分析能有效補足${nA}的盲點，避免重大失誤`);
   }
 
   // 2. 六神性格碰撞
@@ -683,7 +744,7 @@ export const generateCompatibilityReport = ({
   if (beastA === beastB) {
     personalityClash = `兩人都臨【${beastA}】，行事風格極為相似，好時同心協力，爭執時脾性也針鋒相對。`;
   } else {
-    personalityClash = `甲方外顯帶有【${beastA}】風範，乙方則帶有【${beastB}】氣息。${beastA}之特質與${beastB}之步調相遇，一動一靜或一剛一柔，充滿互補色彩。`;
+    personalityClash = `${nA}外顯帶有【${beastA}】風範，${nB}則帶有【${beastB}】氣息。${beastA}之特質與${beastB}之步調相遇，一動一靜或一剛一柔，充滿互補色彩。`;
   }
 
   // 3. 卦宮五行生剋
@@ -721,17 +782,17 @@ export const generateCompatibilityReport = ({
     badgeColor = 'bg-amber-600 text-white';
   }
 
-  // 4. 給甲方的相處錦囊
+  // 4. 給${nA}的相處錦囊
   const adviceForA = [
-    `【理解乙方核心思維】：乙方本命屬【${wuxingB}】，最看重的是${wuxingB === '水' ? '溝通靈活與心靈共鳴' : wuxingB === '木' ? '被尊重原則與成長空間' : wuxingB === '火' ? '熱情肯定與及時回應' : wuxingB === '金' ? '是非分明與信用諾言' : '踏實安全感與陪伴'}。切莫用你自己的步調強加給對方。`,
-    `【講話避雷指南】：當乙方臨【${beastB}】發脾氣或沉默時，千萬別跟著硬碰硬。給對方十分鐘沉澱緩衝，倒杯水先軟化氛圍，事情就能解決大半。`,
+    `【理解${nB}核心思維】：${nB}本命屬【${wuxingB}】，最看重的是${wuxingB === '水' ? '溝通靈活與心靈共鳴' : wuxingB === '木' ? '被尊重原則與成長空間' : wuxingB === '火' ? '熱情肯定與及時回應' : wuxingB === '金' ? '是非分明與信用諾言' : '踏實安全感與陪伴'}。切莫用你自己的步調強加給對方。`,
+    `【講話避雷指南】：當${nB}臨【${beastB}】發脾氣或沉默時，千萬別跟著硬碰硬。給對方十分鐘沉澱緩衝，倒杯水先軟化氛圍，事情就能解決大半。`,
     `【主動釋放愛意】：在日常中多留意對方的付出並真誠道謝，對方會更樂意做你的堅強後盾。`
   ];
 
-  // 5. 給乙方的相處錦囊
+  // 5. 給${nB}的相處錦囊
   const adviceForB = [
-    `【理解甲方核心思維】：甲方本命屬【${wuxingA}】，內心最渴望的是${wuxingA === '水' ? '被理解與心意相通' : wuxingA === '木' ? '志向得到認可支持' : wuxingA === '火' ? '面子被維護與讚美' : wuxingA === '金' ? '擔當被看見與信任' : '家庭與感情的穩定踏實'}。請多給予肯定掌聲。`,
-    `【講話避雷指南】：甲方外臨【${beastA}】，最怕冷嘲熱諷或被當眾質疑。有話私下關門溝通，維護好對方的尊嚴，甲方必定會回饋更多溫柔。`,
+    `【理解${nA}核心思維】：${nA}本命屬【${wuxingA}】，內心最渴望的是${wuxingA === '水' ? '被理解與心意相通' : wuxingA === '木' ? '志向得到認可支持' : wuxingA === '火' ? '面子被維護與讚美' : wuxingA === '金' ? '擔當被看見與信任' : '家庭與感情的穩定踏實'}。請多給予肯定掌聲。`,
+    `【講話避雷指南】：${nA}外臨【${beastA}】，最怕冷嘲熱諷或被當眾質疑。有話私下關門溝通，維護好對方的尊嚴，${nA}必定會回饋更多溫柔。`,
     `【留出彈性空間】：適度放下控制欲，允許兩人間保留少許個人獨處時光，距離往往能產生更深的美感。`
   ];
 

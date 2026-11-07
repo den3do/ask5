@@ -23,26 +23,41 @@ export function computeDestiny(f) {
   let sYear = parseInt(f.year, 10);
   let sMonth = parseInt(f.month, 10);
   let sDay = parseInt(f.day, 10);
+  let hIdx = f.hourIdx !== '' && f.hourIdx !== null && f.hourIdx !== undefined ? parseInt(f.hourIdx, 10) : null;
+  let calendarType = f.calendarType;
+
+  // 傳入 resolveMoment() 的結果時，採用其「有效日期與時辰」（真太陽時、夜子時換日、歷史時區）
+  if (f.moment) {
+    const c = f.moment.chinese;
+    sYear = c.year; sMonth = c.month; sDay = c.day; hIdx = c.hourIdx;
+    calendarType = 'solar';
+    // 出生時間不詳：不採用時辰（時柱、梅花下卦與動爻皆不排，改走明示的權宜法）
+    if (f.timeUnknown) hIdx = null;
+  }
 
   let lYear = sYear, lMonth = sMonth, lDay = sDay;
-  if (f.calendarType === 'solar') {
+  if (calendarType === 'solar') {
     const lunar = solarToLunar(sYear, sMonth, sDay);
     lYear = lunar.lunarYear;
     lMonth = lunar.lunarMonth;
     lDay = lunar.lunarDay;
   } else {
-    const solar = lunarToSolar(lYear, lMonth, lDay);
+    const solar = lunarToSolar(lYear, lMonth, lDay, !!f.isLeapMonth);
     sYear = solar.year;
     sMonth = solar.month;
     sDay = solar.day;
   }
 
-  const hIdx = f.hourIdx !== '' && f.hourIdx !== null && f.hourIdx !== undefined ? parseInt(f.hourIdx, 10) : null;
-  const pillars = calculatePillars(sYear, sMonth, sDay, hIdx);
+  const pillars = calculatePillars(sYear, sMonth, sDay, hIdx, { utc: f.moment?.utc });
   const hexNums = calculateDestinyHexNumbers(lYear, lMonth, lDay, hIdx);
+
+  const notes = [];
+  if (pillars.termWarning) notes.push(pillars.termWarning);
+  if (hexNums.heuristic) notes.push('未提供出生時辰：傳統梅花命卦必須有時辰才能定下卦與動爻，此卦以「權宜法」補位（非傳統），僅供參考。');
 
   const uMod = hexNums.upperTrigramId;
   const lMod = hexNums.lowerTrigramId;
+  notes.push('流派提醒：梅花數（邵康節）起卦與京房納甲（六親、六神、世應）屬不同傳統，本站把梅花命卦套上納甲排盤是現代整合用法，並非古法原貌；六親、六神僅作性格與關係的象徵參考，不作吉凶定論。');
   const palaceInfo = findPalaceAndShi(uMod, lMod);
   const sixBeasts = getSixBeasts(pillars.dayStem);
 
@@ -75,7 +90,7 @@ export function computeDestiny(f) {
 
   const report = generateDestinyReport({
     birthdayStr: `${f.year}年${f.month}月${f.day}日`,
-    calendarType: f.calendarType,
+    calendarType,
     hasHour: hIdx !== null,
     hourBranch: hIdx !== null ? BRANCHES[hIdx] : null,
     pillars,
@@ -87,6 +102,9 @@ export function computeDestiny(f) {
 
   return {
     ...report,
+    notes,
+    lunar: { year: lYear, month: lMonth, day: lDay },
+    pillarsRaw: pillars,
     name: f.name || '命主',
     gender: f.gender,
     uTrigram: TRIGRAMS[uMod],

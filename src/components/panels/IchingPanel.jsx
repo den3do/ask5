@@ -1,6 +1,7 @@
 import React from 'react';
 import { Explainer, SectionTitle } from '../ui';
 import SmartReading from '../SmartReading';
+import BaziCard from '../BaziCard';
 import { generateIchingPrompt } from '../../utils/profile';
 
 const WX_STYLE = {
@@ -128,6 +129,8 @@ export default function IchingPanel({ profile, onOpenSettings }) {
           </div>
         </div>
       </div>
+
+      <BaziCard bazi={profile.bazi} />
 
       <SmartReading systemKey="iching" prompt={generateIchingPrompt(profile)} onOpenSettings={onOpenSettings} />
     </div>

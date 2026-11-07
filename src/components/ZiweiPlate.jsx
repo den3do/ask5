@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { Sparkles, Compass, Shield, User, Info, ArrowUpRight } from 'lucide-react';
 import { ZIWEI_GRID_LAYOUT } from '../utils/ziwei';
+import { describePalace } from '../utils/lifeReading';
+
+const BRS = '子丑寅卯辰巳午未申酉戌亥';
+const TONE_CLS = { good: 'bg-emerald-600/30 text-emerald-300 border-emerald-500/40', mid: 'bg-slate-600/30 text-slate-300 border-slate-500/40', bad: 'bg-rose-600/30 text-rose-300 border-rose-500/40' };
+const TONE_LABEL = { good: '吉', mid: '平', bad: '凶' };
 
 export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
   const [selectedBranch, setSelectedBranch] = useState(
@@ -46,9 +51,18 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
 
   return (
     <div className="space-y-6 animate-fade-in font-serif">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-600 font-sans bg-white/80 border border-stone-200 rounded-lg px-3 py-2">
+        <span className="font-bold text-stone-800">圖例</span>
+        <span className="flex items-center gap-1.5"><i className="inline-block w-4 h-3 rounded-sm border-2 border-amber-500" />選取的宮位</span>
+        <span className="flex items-center gap-1.5"><i className="inline-block w-4 h-3 rounded-sm border-2 border-sky-400" />對宮（相互影響最強）</span>
+        <span className="flex items-center gap-1.5"><i className="inline-block w-4 h-3 rounded-sm border-2 border-dashed border-sky-500" />三合宮（三方四正）</span>
+        <span className="flex items-center gap-1.5"><b className="text-amber-500">金字</b>主星・<b className="text-cyan-600">青字</b>吉輔・<b className="text-rose-500">紅字</b>煞星</span>
+        <span>祿權科忌＝生年四化・[廟旺]強、[陷]弱</span>
+      </div>
+
       {/* 4x4 經典回字型命盤 */}
       <div className="bg-slate-950 p-3 sm:p-5 rounded-2xl border-2 border-amber-600/40 shadow-2xl overflow-x-auto">
-        <div className="min-w-[720px] max-w-[960px] mx-auto grid grid-cols-4 grid-rows-4 gap-1.5 sm:gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+        <div className="min-w-[780px] max-w-[960px] mx-auto grid grid-cols-4 grid-rows-4 gap-1.5 sm:gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
           
           {/* 渲染 12 個外圍宮位 */}
           {ZIWEI_GRID_LAYOUT.map(({ branch, row, col }) => {
@@ -58,6 +72,9 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
             const isSelected = selectedBranch === branch;
             const isSoul = palace.isOriginalPalace || palace.name === '命宮';
             const isBody = palace.isBodyPalace;
+            const diff = (BRS.indexOf(branch) - BRS.indexOf(selectedBranch) + 12) % 12;
+            const rel = diff === 6 ? 'opp' : diff === 4 || diff === 8 ? 'tri' : null;
+            const oppStars = palacesByBranch[BRS[(BRS.indexOf(branch) + 6) % 12]]?.majorStars || [];
 
             // CSS grid-area 定位
             const style = {
@@ -70,9 +87,13 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                 key={branch}
                 style={style}
                 onClick={() => setSelectedBranch(branch)}
-                className={`relative flex flex-col justify-between p-2 sm:p-2.5 rounded-xl border cursor-pointer transition-all min-h-[140px] sm:min-h-[160px] text-xs select-none ${
+                className={`relative flex flex-col justify-between p-2 sm:p-2.5 rounded-xl border cursor-pointer transition-all min-h-[170px] sm:min-h-[190px] text-sm select-none ${
                   isSelected
-                    ? 'bg-amber-950/40 border-amber-500 shadow-lg shadow-amber-500/20 ring-1 ring-amber-500'
+                    ? 'bg-amber-950/40 border-amber-500 shadow-lg shadow-amber-500/20 ring-2 ring-amber-500'
+                    : rel === 'opp'
+                    ? 'bg-sky-950/30 border-sky-400 ring-1 ring-sky-400/70'
+                    : rel === 'tri'
+                    ? 'bg-sky-950/20 border-sky-500/70 border-dashed'
                     : isSoul
                     ? 'bg-red-950/20 border-red-500/40 hover:bg-slate-800/80 hover:border-slate-600'
                     : 'bg-slate-900/90 border-slate-800/90 hover:bg-slate-850 hover:border-slate-700'
@@ -81,18 +102,21 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                 {/* 宮位頂部標籤 */}
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-1">
                   <div className="flex items-center gap-1">
-                    <span className={`font-bold text-xs sm:text-sm ${
+                    <span className={`font-extrabold text-base ${
                       isSoul ? 'text-red-400' : isSelected ? 'text-amber-300' : 'text-slate-200'
                     }`}>
                       {palace.name}
                     </span>
                     {isBody && (
-                      <span className="bg-indigo-600/60 text-indigo-200 border border-indigo-400/40 text-[9px] px-1 rounded">
+                      <span className="bg-indigo-600/60 text-indigo-200 border border-indigo-400/40 text-[11px] px-1 rounded">
                         身
                       </span>
                     )}
+                    {rel && !isSelected && (
+                      <span className="text-[11px] px-1 rounded border border-sky-400/50 text-sky-300">{rel === 'opp' ? '對宮' : '三合'}</span>
+                    )}
                   </div>
-                  <span className="text-[11px] font-mono text-stone-400">
+                  <span className="text-xs font-mono text-stone-300">
                     {palace.heavenlyStem}{palace.earthlyBranch}
                   </span>
                 </div>
@@ -102,14 +126,14 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                   {palace.majorStars.length > 0 ? (
                     <div className="flex flex-wrap gap-x-2 gap-y-1">
                       {palace.majorStars.map((star, idx) => (
-                        <div key={idx} className="flex items-center text-xs">
-                          <span className={`font-extrabold ${
+                        <div key={idx} className="flex items-center text-base">
+                          <span className={`font-black ${
                             star.isMajor ? 'text-amber-300' : 'text-slate-200'
                           }`}>
                             {star.name}
                           </span>
                           {star.brightness && (
-                            <span className={`text-[10px] ml-0.5 ${getBrightnessClass(star.brightness)}`}>
+                            <span className={`text-xs ml-0.5 ${getBrightnessClass(star.brightness)}`}>
                               [{star.brightness}]
                             </span>
                           )}
@@ -118,15 +142,15 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                       ))}
                     </div>
                   ) : (
-                    <span className="text-stone-600 text-[11px] italic">（借對宮主星）</span>
+                    <span className="text-stone-400 text-xs italic">（無主星，借對宮：{oppStars.map((x) => x.name).join('、') || '無'}）</span>
                   )}
                 </div>
 
                 {/* 輔星、吉曜與煞曜 */}
-                <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] leading-tight text-slate-400">
+                <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs leading-snug text-slate-300">
                   {palace.minorStars.map((star, idx) => (
                     <span key={idx} className={`${
-                      ['擎羊', '陀羅', '火星', '鈴星', '天空', '地劫'].includes(star.name)
+                      ['擎羊', '陀羅', '火星', '鈴星', '天空', '地空', '地劫'].includes(star.name)
                         ? 'text-rose-400 font-semibold'
                         : ['左輔', '右弼', '天魁', '天鉞', '文昌', '文曲'].includes(star.name)
                         ? 'text-cyan-300 font-semibold'
@@ -137,16 +161,16 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                     </span>
                   ))}
                   {palace.adjectiveStars.slice(0, 4).map((star, idx) => (
-                    <span key={idx} className="text-stone-500 text-[9px]">
+                    <span key={idx} className="text-stone-400 text-[11px]">
                       {star.name}
                     </span>
                   ))}
                 </div>
 
                 {/* 底部：大限區間與長生博士 */}
-                <div className="mt-1 pt-1 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-stone-500 font-sans">
+                <div className="mt-1 pt-1 border-t border-slate-800/80 flex items-center justify-between text-xs text-stone-400 font-sans">
                   <span>{palace.changsheng12}</span>
-                  <span className="font-mono text-amber-500/80 font-bold">
+                  <span className="font-mono text-amber-400 font-bold text-sm">
                     {palace.decadal.range[0]}-{palace.decadal.range[1]}
                   </span>
                   <span>{palace.boshi12}</span>
@@ -228,6 +252,19 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
               大限年齡：{selectedPalace.decadal.range[0]} - {selectedPalace.decadal.range[1]} 歲
             </div>
           </div>
+
+          {(() => {
+            const d = describePalace(astrolabeData, selectedPalace);
+            return (
+              <div className="bg-stone-950 p-3 rounded-lg border border-stone-800 font-sans">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-amber-400 font-bold text-sm">這個宮位怎麼解</span>
+                  <span className={`px-2 py-0.5 rounded-full border text-xs font-bold ${TONE_CLS[d.tone]}`}>{TONE_LABEL[d.tone]}</span>
+                </div>
+                <p className="text-sm leading-7 text-stone-200">{d.text}</p>
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
             <div className="bg-stone-950 p-3 rounded-lg border border-stone-800 space-y-1.5">

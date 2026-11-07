@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import BirthForm from './BirthForm';
 import IchingPanel from './panels/IchingPanel';
+import WeixinPanel from './panels/WeixinPanel';
 import ZiweiPanel from './panels/ZiweiPanel';
 import HdPanel from './panels/HdPanel';
 import AstroPanel from './panels/AstroPanel';
@@ -10,6 +11,7 @@ import { DEFAULT_BIRTH, computeFullProfile } from '../utils/profile';
 
 const SUBTABS = [
   { id: 'iching', label: '易經命卦', emoji: '☯️', C: IchingPanel },
+  { id: 'weixin', label: '唯心宗', emoji: '🧘', C: WeixinPanel },
   { id: 'ziwei', label: '紫微斗數', emoji: '🌌', C: ZiweiPanel },
   { id: 'hd', label: '人類圖', emoji: '⬡', C: HdPanel },
   { id: 'astro', label: '西洋星座', emoji: '🪐', C: AstroPanel },
@@ -37,6 +39,9 @@ export default function PersonalHub({ onOpenSettings }) {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg px-4 py-3 text-xs font-sans">
+        ⚠ 目前預填的是<b>範例生辰</b>，不是你的資料。請改成你的出生日期、時間與地點，再按「排出命盤」。
+      </div>
       <BirthForm title="個人生辰（輸入一次，四大系統共用）" value={birth} onChange={setBirth} />
 
       <div className="flex justify-end">
@@ -57,6 +62,20 @@ export default function PersonalHub({ onOpenSettings }) {
 
       {profile && (
         <div className="space-y-5">
+          {profile.warnings?.length > 0 && (
+            <div role="note" className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-xs font-sans space-y-1">
+              <div className="font-bold">排盤提醒（影響準確度的條件）</div>
+              <ul className="list-disc pl-4 space-y-0.5">
+                {profile.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
+          <details className="text-[11px] text-stone-500 font-sans">
+            <summary className="cursor-pointer">本次排盤採用的約定（流派與時間換算）</summary>
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              {profile.conventions.map((c, i) => <li key={i}>{c}</li>)}
+            </ul>
+          </details>
           <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-stone-100/95 backdrop-blur border-b border-stone-200">
             <div role="tablist" aria-label="命理系統" className="flex gap-1.5 overflow-x-auto pb-0.5 font-sans">
               {SUBTABS.map((t) => (

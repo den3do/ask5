@@ -185,9 +185,15 @@ function getAuthority(centers, definedChannels, type) {
   if (defined('solar')) return '情緒權威（等待情緒波浪平息）';
   if (defined('sacral')) return '薦骨權威（跟隨當下的內在回應）';
   if (defined('spleen')) return '脾臟權威（相信瞬間的直覺）';
-  if (defined('heart')) return '意志力權威（依據真正的承諾與意願）';
-  if (defined('gCenter')) return '自我投射權威（說出口來聽見自己）';
-  return '無內在權威（透過與人討論與環境來判斷）';
+  // 以下需看通道連接（僅「中心有定義」並不足以構成該權威）
+  if (defined('heart')) {
+    if (connected(definedChannels, 'heart', (c) => c === 'throat')) return '意志力權威・顯示者（心臟連喉嚨：說出真正的承諾與意願）';
+    if (connected(definedChannels, 'heart', (c) => c === 'gCenter')) return '意志力權威・投射者（心臟連 G 中心：依據真正的意願與價值）';
+  }
+  if (defined('gCenter') && connected(definedChannels, 'gCenter', (c) => c === 'throat')) {
+    return '自我投射權威（G 中心連喉嚨：說出口來聽見自己）';
+  }
+  return '無內在權威・心智投射（以喉嚨／邏輯／頭腦為主，透過與信任的人討論來判斷）';
 }
 
 const PROFILE_NAMES = {
@@ -206,7 +212,32 @@ function getProfile(consciousSunLine, unconsciousSunLine) {
  * 主計算入口
  * @param {Object} p 出生當地日期時間與 tz（小時差）
  */
-export function calculateHumanDesign({ year, month, day, hour = 12, minute = 0, tz = 8 }) {
+export function calculateHumanDesign({ year, month, day, hour = 12, minute = 0, tz = 8, timeKnown = true }) {
+  const main = computeHd({ year, month, day, hour, minute, tz });
+  if (timeKnown) return { ...main, timeUncertainty: null };
+
+  // 出生時間不詳：月亮一天走約 13°（每閘 5.625°），用當日 00:00 與 23:59 兩端檢查結果是否穩定
+  const a = computeHd({ year, month, day, hour: 0, minute: 0, tz });
+  const b = computeHd({ year, month, day, hour: 23, minute: 59, tz });
+  const setA = new Set(a.activeGates); const setB = new Set(b.activeGates);
+  const gatesUncertain = [...new Set([...setA, ...setB])].filter((g) => setA.has(g) !== setB.has(g)).sort((x, y) => x - y);
+  const typeStable = a.typeInfo.type === b.typeInfo.type;
+  const authorityStable = a.authority === b.authority;
+  const profileStable = a.profileInfo.profile === b.profileInfo.profile;
+  const channelKey = (r) => r.definedChannels.map((c) => c.gates.join('-')).join(',');
+  const channelsStable = channelKey(a) === channelKey(b);
+  const parts = [];
+  if (!typeStable) parts.push(`類型可能是${a.typeInfo.type}或${b.typeInfo.type}`);
+  if (!authorityStable) parts.push('內在權威不確定');
+  if (!profileStable) parts.push(`人生角色可能是${a.profileInfo.profile}或${b.profileInfo.profile}`);
+  if (!channelsStable) parts.push('部分通道與中心定義不確定');
+  const note = parts.length
+    ? `出生時間不詳：${parts.join('；')}（不確定的閘門：${gatesUncertain.join('、') || '無'}）。請取得出生時間後再看人類圖。`
+    : '出生時間不詳，但當日 00:00–24:00 的類型、權威、角色與通道皆相同，結果可信（僅月亮、設計月亮的閘門／爻數可能不同）。';
+  return { ...main, timeUncertainty: { typeStable, authorityStable, profileStable, channelsStable, gatesUncertain, note, alt: [a.typeInfo.type, b.typeInfo.type] } };
+}
+
+function computeHd({ year, month, day, hour = 12, minute = 0, tz = 8 }) {
   const birthDate = localToUtcDate({ year, month, day, hour, minute, tz });
   if (Number.isNaN(birthDate.getTime())) throw new Error('出生日期或時間無效');
 
@@ -256,7 +287,7 @@ export function calculateHumanDesign({ year, month, day, hour = 12, minute = 0, 
  * - compromise 妥協：一人有完整通道，另一人有其中一端（需要磨合）
  * - dominance 支配：一人有完整通道，另一人兩端都沒有（一方主導該能量）
  */
-export function compareHumanDesign(hdA, hdB) {
+export function compareHumanDesign(hdA, hdB, nA = 'A', nB = 'B') {
   const gatesA = new Set(hdA.activeGates);
   const gatesB = new Set(hdB.activeGates);
   const result = { electromagnetic: [], companion: [], compromise: [], dominance: [] };
@@ -269,14 +300,14 @@ export function compareHumanDesign(hdA, hdB) {
     const countB = (gatesB.has(g1) ? 1 : 0) + (gatesB.has(g2) ? 1 : 0);
 
     if (fullA && fullB) result.companion.push({ ...ch, who: '雙方皆有' });
-    else if (fullA && countB === 1) result.compromise.push({ ...ch, who: 'A 完整、B 一端' });
-    else if (fullB && countA === 1) result.compromise.push({ ...ch, who: 'B 完整、A 一端' });
-    else if (fullA && countB === 0) result.dominance.push({ ...ch, who: 'A 主導' });
-    else if (fullB && countA === 0) result.dominance.push({ ...ch, who: 'B 主導' });
+    else if (fullA && countB === 1) result.compromise.push({ ...ch, who: `${nA} 完整、${nB} 一端` });
+    else if (fullB && countA === 1) result.compromise.push({ ...ch, who: `${nB} 完整、${nA} 一端` });
+    else if (fullA && countB === 0) result.dominance.push({ ...ch, who: `${nA} 主導` });
+    else if (fullB && countA === 0) result.dominance.push({ ...ch, who: `${nB} 主導` });
     else if (!fullA && !fullB && countA === 1 && countB === 1) {
       const aHas = gatesA.has(g1) ? g1 : g2;
       const bHas = gatesB.has(g1) ? g1 : g2;
-      if (aHas !== bHas) result.electromagnetic.push({ ...ch, who: `A 的 G${aHas} ＋ B 的 G${bHas}` });
+      if (aHas !== bHas) result.electromagnetic.push({ ...ch, who: `${nA} 的 G${aHas} ＋ ${nB} 的 G${bHas}` });
     }
   }
 

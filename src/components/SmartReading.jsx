@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, KeyRound } from 'lucide-react';
 import AiAnalysisSection from './AiAnalysisSection';
+import CopyPromptButton from './CopyPromptButton';
 import { getAiConfig } from '../utils/aiService';
 
 /** 三位解讀角色 */
@@ -25,14 +26,14 @@ export const PERSONAS = [
 /** 各系統預設的角色 */
 export const DEFAULT_PERSONA = { iching: 'wudang', ziwei: 'diviner', astro: 'psych', hd: 'psych' };
 
-const FUSION_SYSTEM = `你同時扮演三位專家並依序發言：「武當老道」（道家哲理、古風白話、修身養性）、「心理學專家」（溫暖理性、以心理學概念解讀、聲明命理系統僅為自我探索工具）、「占卜大師」（篤定有人情味、趨勢與時機）。三位各自以自己的口吻與專業判斷，最後由你彙整成「三師會診」的融合結論。不恐嚇、不對醫療投資法律作保證，一律使用繁體中文。`;
+const FUSION_SYSTEM = `你是精通紫微斗數、人類圖與西洋占星心理學的整合型解讀者。任務是把三套系統「融合」而非逐一羅列：找出多家共同指向的主題、說明彼此矛盾之處與整合方式，並用流暢、溫暖、白話的繁體中文重新組織成一篇有主軸的總論。聲明這些系統是自我探索的象徵工具，不是科學診斷；不恐嚇、不鐵口直斷吉凶、不對醫療投資法律作保證。`;
 
 /**
  * 智慧相命：有 API Key 才顯示 AI 解讀；沒有 Key 只顯示一行提示。
  * @param {string} systemKey iching | ziwei | astro | hd | fusion
  * @param {string} prompt    資料與問題（不含角色設定）
  */
-export default function SmartReading({ systemKey, prompt, onOpenSettings, title = '智慧相命' }) {
+export default function SmartReading({ systemKey, prompt, onOpenSettings, title = '智慧相命', systemPrompt }) {
   const [personaId, setPersonaId] = useState(DEFAULT_PERSONA[systemKey] || 'diviner');
   let hasKey = false;
   try {
@@ -41,47 +42,68 @@ export default function SmartReading({ systemKey, prompt, onOpenSettings, title 
     hasKey = false;
   }
 
+  const isFusion = systemKey === 'fusion';
+  const persona = PERSONAS.find((p) => p.id === personaId) || PERSONAS[0];
+  const finalPrompt = isFusion || systemPrompt ? prompt : `【角色指定】請${persona.voice}回答，並以此覆蓋下方提示中對你身分的任何描述。
+
+${prompt}`;
+  const sysText = systemPrompt || (isFusion ? FUSION_SYSTEM : persona.system);
+  const picker = !isFusion && !systemPrompt && (
+    <div className="flex flex-wrap items-center gap-2 font-sans">
+      <span className="flex items-center gap-1 text-xs font-bold text-stone-600"><Bot className="w-4 h-4" />解讀角色</span>
+      {PERSONAS.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={() => setPersonaId(p.id)}
+          aria-pressed={personaId === p.id}
+          className={`px-3 py-1.5 rounded-full border text-xs font-bold transition ${
+            personaId === p.id
+              ? 'bg-stone-900 text-amber-300 border-amber-500 shadow'
+              : 'bg-white text-stone-600 border-stone-300 hover:border-stone-500'
+          }`}
+          title={p.tagline}
+        >
+          {p.emoji} {p.name}
+        </button>
+      ))}
+      <span className="text-[11px] text-stone-400">{persona.tagline}</span>
+    </div>
+  );
+
   if (!hasKey) {
     return (
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 bg-white/60 hover:bg-white px-4 py-3 text-xs text-stone-500 hover:text-stone-700 font-sans transition"
-      >
-        <KeyRound className="w-4 h-4" />
-        設定 Gemini 或 OpenRouter 的 API Key 後，這裡會出現「智慧相命」AI 深度解讀
-      </button>
+      <div className="rounded-xl border border-dashed border-stone-300 bg-white/70 p-4 font-sans text-xs text-stone-600 leading-relaxed space-y-2">
+        <div className="flex items-center gap-2 font-bold text-stone-800 text-sm">
+          <Bot className="w-4 h-4" />{title}（選用功能）
+        </div>
+        <p>
+          上面的排盤與斷語不需要任何設定就能使用。若想再讓 AI 用白話幫你深入解讀，可以貼上自己的 AI 金鑰（Google Gemini 有免費額度，
+          到 Google AI Studio 約 1 分鐘可取得）。不想設定也沒關係，可直接按下方「一鍵複製 AI 提示詞」貼到 ChatGPT、Claude 等你熟悉的 AI。
+        </p>
+        {picker}
+        <div className="flex flex-wrap gap-2">
+          <CopyPromptButton systemPrompt={sysText} prompt={finalPrompt} />
+        </div>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-900 text-amber-300 font-bold hover:bg-stone-800"
+        >
+          <KeyRound className="w-3.5 h-3.5" />設定 AI 金鑰
+        </button>
+      </div>
     );
   }
 
-  const isFusion = systemKey === 'fusion';
-  const persona = PERSONAS.find((p) => p.id === personaId) || PERSONAS[0];
-  const finalPrompt = isFusion ? prompt : `【角色指定】請${persona.voice}回答，並以此覆蓋下方提示中對你身分的任何描述。\n\n${prompt}`;
+  // 自帶專屬角色（如唯心宗）：不顯示角色切換
+  if (systemPrompt) {
+    return <AiAnalysisSection title={title} prompt={prompt} systemPrompt={systemPrompt} onOpenSettings={onOpenSettings} />;
+  }
 
   return (
     <div className="space-y-3">
-      {!isFusion && (
-        <div className="flex flex-wrap items-center gap-2 font-sans">
-          <span className="flex items-center gap-1 text-xs font-bold text-stone-600"><Bot className="w-4 h-4" />解讀角色</span>
-          {PERSONAS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPersonaId(p.id)}
-              aria-pressed={personaId === p.id}
-              className={`px-3 py-1.5 rounded-full border text-xs font-bold transition ${
-                personaId === p.id
-                  ? 'bg-stone-900 text-amber-300 border-amber-500 shadow'
-                  : 'bg-white text-stone-600 border-stone-300 hover:border-stone-500'
-              }`}
-              title={p.tagline}
-            >
-              {p.emoji} {p.name}
-            </button>
-          ))}
-          <span className="text-[11px] text-stone-400">{persona.tagline}</span>
-        </div>
-      )}
+      {picker}
       <AiAnalysisSection
         title={isFusion ? `${title} ‧ 三師會診` : `${title} ‧ ${persona.name}`}
         prompt={finalPrompt}

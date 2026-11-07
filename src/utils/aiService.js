@@ -1,6 +1,6 @@
 /**
  * AI 服務核心模組 - 支援 Google Gemini 與 OpenRouter 雙通道
- * 100% 純前端執行，金鑰由使用者自備並存於本地 localStorage (BYOK)
+ * 100% 純前端執行，金鑰由使用者自備 (BYOK)：僅存 sessionStorage（關閉分頁即清除），不寫入 localStorage
  */
 
 export const AI_PROVIDERS = {
@@ -35,12 +35,41 @@ const STORAGE_KEYS = {
 /**
  * 讀取本地儲存的 AI 配置
  */
+// 金鑰「只」存在 sessionStorage（關閉分頁即清除），絕不寫入 localStorage。
+// （github.io 同一帳號下所有專案共用 localStorage，明文金鑰可被同源其他頁面讀走。）
+const safe = (fn, fallback = '') => { try { return fn(); } catch { return fallback; } };
+const KEY_NAMES = [STORAGE_KEYS.GEMINI_KEY, STORAGE_KEYS.OPENROUTER_KEY];
+
+// 舊版可能把金鑰明文存在 localStorage：載入時一律清除，不做遷移
+KEY_NAMES.forEach((k) => safe(() => localStorage.removeItem(k)));
+
+const readKey = (k) => safe(() => sessionStorage.getItem(k)) || '';
+
+/** 錯誤訊息可能回顯金鑰：顯示前遮蔽金鑰樣式字串並限制長度 */
+export function redactSecrets(text) {
+  return String(text ?? '')
+    .replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza***')
+    .replace(/sk-[A-Za-z0-9_\-]{10,}/g, 'sk-***')
+    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer ***')
+    .slice(0, 300);
+}
+
+/** 清除本站在此瀏覽器的所有資料（金鑰、設定、生辰檔案、字級） */
+export function clearAllLocalData() {
+  safe(() => {
+    Object.keys(localStorage).filter((k) => k.startsWith('ask5_')).forEach((k) => localStorage.removeItem(k));
+  });
+  safe(() => {
+    Object.keys(sessionStorage).filter((k) => k.startsWith('ask5_')).forEach((k) => sessionStorage.removeItem(k));
+  });
+}
+
 export function getAiConfig() {
-  const provider = localStorage.getItem(STORAGE_KEYS.PROVIDER) || AI_PROVIDERS.GEMINI;
-  const geminiKey = localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) || '';
-  const geminiModel = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || GEMINI_DEFAULT_MODELS[0].id;
-  const openrouterKey = localStorage.getItem(STORAGE_KEYS.OPENROUTER_KEY) || '';
-  const openrouterModel = localStorage.getItem(STORAGE_KEYS.OPENROUTER_MODEL) || OPENROUTER_DEFAULT_MODELS[0].id;
+  const provider = safe(() => localStorage.getItem(STORAGE_KEYS.PROVIDER)) || AI_PROVIDERS.GEMINI;
+  const geminiKey = readKey(STORAGE_KEYS.GEMINI_KEY);
+  const geminiModel = safe(() => localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL)) || GEMINI_DEFAULT_MODELS[0].id;
+  const openrouterKey = readKey(STORAGE_KEYS.OPENROUTER_KEY);
+  const openrouterModel = safe(() => localStorage.getItem(STORAGE_KEYS.OPENROUTER_MODEL)) || OPENROUTER_DEFAULT_MODELS[0].id;
 
   return {
     provider,
@@ -58,11 +87,25 @@ export function getAiConfig() {
  * 儲存 AI 配置到 localStorage
  */
 export function saveAiConfig({ provider, geminiKey, geminiModel, openrouterKey, openrouterModel }) {
-  if (provider !== undefined) localStorage.setItem(STORAGE_KEYS.PROVIDER, provider);
-  if (geminiKey !== undefined) localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, geminiKey.trim());
-  if (geminiModel !== undefined) localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, geminiModel.trim());
-  if (openrouterKey !== undefined) localStorage.setItem(STORAGE_KEYS.OPENROUTER_KEY, openrouterKey.trim());
-  if (openrouterModel !== undefined) localStorage.setItem(STORAGE_KEYS.OPENROUTER_MODEL, openrouterModel.trim());
+  if (provider !== undefined) safe(() => localStorage.setItem(STORAGE_KEYS.PROVIDER, provider));
+  if (geminiModel !== undefined) safe(() => localStorage.setItem(STORAGE_KEYS.GEMINI_MODEL, geminiModel.trim()));
+  if (openrouterModel !== undefined) safe(() => localStorage.setItem(STORAGE_KEYS.OPENROUTER_MODEL, openrouterModel.trim()));
+  const putKey = (k, v) => {
+    if (v === undefined) return;
+    const val = v.trim();
+    safe(() => { sessionStorage.removeItem(k); localStorage.removeItem(k); });
+    if (!val) return;
+    safe(() => sessionStorage.setItem(k, val));
+  };
+  putKey(STORAGE_KEYS.GEMINI_KEY, geminiKey);
+  putKey(STORAGE_KEYS.OPENROUTER_KEY, openrouterKey);
+}
+
+/** 清除所有已儲存的 API Key */
+export function clearAiKeys() {
+  [STORAGE_KEYS.GEMINI_KEY, STORAGE_KEYS.OPENROUTER_KEY].forEach((k) => {
+    safe(() => { sessionStorage.removeItem(k); localStorage.removeItem(k); });
+  });
 }
 
 /**
@@ -108,6 +151,16 @@ export function testAiConnection({ provider, apiKey, model }) {
     }
   });
 }
+
+/**
+ * 所有 AI 解讀共用的紀律：解讀層是 LLM，最容易把簡化規則說成鐵口直斷，這裡強制約束。
+ */
+export const AI_READING_GUARD = `【解讀紀律（必須遵守）】
+1. 只能根據使用者提供的排盤資料論述；資料沒有的星曜、神煞、流月流日一律不得杜撰。
+2. 排盤資料已標明的限制、降級判斷（如用神不現、時辰不詳、從格徵兆、流派差異）必須在結論中如實提醒，不可忽略。
+3. 一律用「傾向、容易、可留意」表述，不下「必定、一定、會死、會離婚」等鐵口斷語；不做醫療、投資、法律的具體建議。
+4. 各體系結論相互矛盾時，要明說矛盾，不要為了圓融而美化；每個重要結論註明依據來自哪個體系與哪個盤面資料。
+5. 簡化規則的結果是參考級，不是定論；結尾須提醒重大決定應面談專業人士。`;
 
 /**
  * 流式呼叫 (Streaming Completion)
@@ -166,7 +219,7 @@ async function streamGemini({ apiKey, model, messages, onChunk, signal }) {
     contents.push({ role: 'user', parts: [{ text: '請進行解讀。' }] });
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?key=${apiKey}&alt=sse`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
 
   const payload = {
     contents,
@@ -183,7 +236,8 @@ async function streamGemini({ apiKey, model, messages, onChunk, signal }) {
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // 金鑰放標頭而非網址，避免進入瀏覽器歷史、代理或日誌
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(payload),
     signal,
   });
@@ -196,7 +250,7 @@ async function streamGemini({ apiKey, model, messages, onChunk, signal }) {
     } catch (_) {
       errorDetail = await response.text();
     }
-    throw new Error(`Gemini API 錯誤 (${response.status}): ${errorDetail || response.statusText}`);
+    throw new Error(`Gemini API 錯誤 (${response.status}): ${redactSecrets(errorDetail || response.statusText)}`);
   }
 
   const reader = response.body.getReader();
@@ -265,7 +319,7 @@ async function streamOpenRouter({ apiKey, model, messages, onChunk, signal }) {
     } catch (_) {
       errorDetail = await response.text();
     }
-    throw new Error(`OpenRouter API 錯誤 (${response.status}): ${errorDetail || response.statusText}`);
+    throw new Error(`OpenRouter API 錯誤 (${response.status}): ${redactSecrets(errorDetail || response.statusText)}`);
   }
 
   const reader = response.body.getReader();
