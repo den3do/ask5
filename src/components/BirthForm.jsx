@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Save, Trash2, UserRound } from 'lucide-react';
+import { Save, FolderOpen, UserRound } from 'lucide-react';
 import { CITY_LIST } from '../utils/astrology';
-import { loadProfiles, saveProfile, deleteProfile } from '../utils/savedProfiles';
+import { downloadBirthProfile, parseBirthProfile } from '../utils/savedProfiles';
 import { resolveBirth } from '../utils/profile';
 
 const inputCls = 'w-full border border-stone-300 rounded px-3 py-2 bg-stone-50 text-sm focus:border-indigo-600 focus:outline-none';
@@ -10,7 +10,6 @@ const inputCls = 'w-full border border-stone-300 rounded px-3 py-2 bg-stone-50 t
  * 通用生辰表單（西曆、精確到分鐘、出生城市、可覆寫時區、可存取資料）
  */
 export default function BirthForm({ title, value, onChange }) {
-  const [saved, setSaved] = useState(() => loadProfiles());
   const [msg, setMsg] = useState('');
   const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
 
@@ -35,17 +34,15 @@ export default function BirthForm({ title, value, onChange }) {
   const flash = (t) => { setMsg(t); setTimeout(() => setMsg(''), 2500); };
 
   const handleSave = () => {
-    const res = saveProfile(value);
-    if (res.ok) { setSaved(res.list); flash('已儲存'); } else flash(res.error);
+    downloadBirthProfile(value);
+    flash('已下載存檔');
   };
-  const handleLoad = (e) => {
-    const p = saved.find((x) => x.name === e.target.value);
-    if (p) onChange({ ...value, ...p });
-  };
-  const handleDelete = () => {
-    if (!value.name) return;
-    setSaved(deleteProfile(value.name));
-    flash('已刪除同名資料');
+  const handleLoad = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    const res = parseBirthProfile(await f.text(), value);
+    if (res.ok) { onChange({ ...value, ...res.birth }); flash('已載入'); } else flash(res.error);
   };
 
   return (
@@ -56,15 +53,12 @@ export default function BirthForm({ title, value, onChange }) {
           {title}
         </h3>
         <div className="flex items-center gap-2 text-xs">
-          <select value="" onChange={handleLoad} className="border border-stone-300 rounded px-2 py-1.5 bg-stone-50" aria-label="載入已儲存的生辰">
-            <option value="">載入已存資料…</option>
-            {saved.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-          </select>
-          <button type="button" onClick={handleSave} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 hover:bg-stone-100" title="以姓名為鍵儲存在本機瀏覽器">
+          <label className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 hover:bg-stone-100 cursor-pointer" title="讀取本站產生的生辰存檔 (.json)">
+            <FolderOpen className="w-3.5 h-3.5" />載入存檔
+            <input type="file" accept=".json,application/json" onChange={handleLoad} className="hidden" />
+          </label>
+          <button type="button" onClick={handleSave} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 hover:bg-stone-100" title="下載成本機 JSON 檔（含本站標記）">
             <Save className="w-3.5 h-3.5" />儲存
-          </button>
-          <button type="button" onClick={handleDelete} className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 hover:bg-red-50 text-red-600" title="刪除同姓名的已存資料">
-            <Trash2 className="w-3.5 h-3.5" />
           </button>
           {msg && <span className="text-emerald-600">{msg}</span>}
         </div>

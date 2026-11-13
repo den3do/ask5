@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/verify-engine.mjs && node scripts/verify-reading.mjs"
+    "test": "node scripts/verify-engine.mjs && node scripts/verify-reading.mjs && node scripts/verify-mbti.mjs"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",

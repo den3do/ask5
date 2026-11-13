@@ -1,36 +1,36 @@
-/** 生辰資料存取（localStorage，僅存在使用者瀏覽器；全部包 try/catch） */
-const KEY = 'ask5_birth_profiles_v1';
+/** 生辰資料存檔：存成本機 JSON 檔（不使用瀏覽器儲存），檔內帶有本站標記 */
+export const FILE_TAG = 'ask5-birth-profile';
 
-export function loadProfiles() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return [];
+/** 觸發瀏覽器下載 JSON 檔 */
+export function downloadBirthProfile(birth) {
+  const rec = { app: FILE_TAG, version: 1, savedAt: new Date().toISOString(), birth: { ...birth } };
+  const name = (birth.name || '').trim() || '未命名';
+  const blob = new Blob([JSON.stringify(rec, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `生辰_${name}_${rec.savedAt.slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * 解析並驗證存檔。只接受帶有本站標記的檔案，且只還原目前表單已有的欄位。
+ * 回傳 { ok:true, birth } 或 { ok:false, error }
+ */
+export function parseBirthProfile(text, template) {
+  let rec;
+  try { rec = JSON.parse(text); } catch { return { ok: false, error: '檔案不是有效的 JSON' }; }
+  if (rec?.app !== FILE_TAG || typeof rec.birth !== 'object' || !rec.birth) {
+    return { ok: false, error: '這不是本站產生的生辰存檔' };
   }
-}
-
-function write(list) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list));
-    return true;
-  } catch {
-    return false;
+  const birth = {};
+  for (const k of Object.keys(template)) {
+    const v = rec.birth[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'object') continue;
+    birth[k] = typeof template[k] === 'boolean' ? Boolean(v) : typeof template[k] === 'number' ? Number(v) : String(v);
   }
-}
-
-/** 以姓名為鍵新增或覆蓋 */
-export function saveProfile(birth) {
-  const name = (birth.name || '').trim();
-  if (!name) return { ok: false, error: '請先填寫姓名才能儲存' };
-  const list = loadProfiles().filter((p) => p.name !== name);
-  list.unshift({ ...birth, name });
-  return write(list.slice(0, 30)) ? { ok: true, list: loadProfiles() } : { ok: false, error: '瀏覽器無法儲存（可能為無痕模式）' };
-}
-
-export function deleteProfile(name) {
-  const list = loadProfiles().filter((p) => p.name !== name);
-  write(list);
-  return list;
+  if (!Object.keys(birth).length) return { ok: false, error: '存檔內沒有可用的生辰資料' };
+  return { ok: true, birth };
 }

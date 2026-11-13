@@ -3,7 +3,7 @@ import {
   Sparkles, BookOpen, Users, Calendar, Clock, Compass, Heart, 
   ShieldAlert, CheckCircle2, AlertCircle, Copy, RefreshCw, 
   Award, Briefcase, Coins, Flame, ChevronRight, HelpCircle,
-  Settings, Bot, Star, Globe, Menu, X, Layers, HeartHandshake
+  Settings, Bot, Star, Globe, Menu, X, Layers, HeartHandshake, Brain
 } from 'lucide-react';
 import { BRANCHES } from './data/constants';
 import { buildDivinationBoard, evaluateDivination } from './utils/iching';
@@ -15,6 +15,7 @@ import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
 const PersonalHub = lazy(() => import('./components/PersonalHub'));
 const SynastryReport = lazy(() => import('./components/SynastryReport'));
+const MbtiTest = lazy(() => import('./components/MbtiTest'));
 
 const PanelLoading = () => (
   <div className="p-8 text-center text-sm text-stone-500 font-sans">載入中…</div>
@@ -58,6 +59,7 @@ const DivinationApp = () => {
     { id: 1, label: '一事一占', Icon: Sparkles },
     { id: 2, label: '個人命理', Icon: Compass },
     { id: 3, label: '雙人合盤', Icon: HeartHandshake },
+    { id: 4, label: 'MBTI 人格', Icon: Brain },
   ];
 
   // -------------------------------------------------------------
@@ -748,6 +750,11 @@ ${linesStr}
         {activeTab === 3 && (
           <Suspense fallback={<PanelLoading />}>
             <SynastryReport onOpenSettings={() => setIsAiModalOpen(true)} />
+          </Suspense>
+        )}
+        {activeTab === 4 && (
+          <Suspense fallback={<PanelLoading />}>
+            <MbtiTest />
           </Suspense>
         )}
 
