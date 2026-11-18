@@ -11,20 +11,16 @@ const HEAD = [
   { key: 'hd', label: '人類圖', emoji: '⬡', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
 ];
 
-const first = (s) => String(s || '').split(/[。；]/)[0];
 const stars = (p) => (p?.majorStars || []).map((s) => `${s.name}${s.mutagen ? `化${s.mutagen}` : ''}`).join('、') || '無主星';
 
 function buildMatrix(p) {
-  const d = p.destiny;
   const z = p.ziwei;
   const a = p.astro.positions;
   const hd = p.hd;
-  const shi = d.linesData.find((l) => l.isShi);
   const ji = [];
   const NA = '需出生時辰';
   const unk = p.astro.timeUnknown;
   z?.raw.palaces.forEach((pl) => [...pl.majorStars, ...pl.minorStars].forEach((s) => { if (s.mutagen === '忌') ji.push(`${s.name}化忌在${pl.name}`); }));
-  const defined = Object.values(hd.centers).filter((c) => c.isDefined).map((c) => c.chName);
   const open = Object.values(hd.centers).filter((c) => !c.isDefined).map((c) => c.chName);
 
   return [

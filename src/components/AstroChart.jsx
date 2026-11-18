@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sun, Star, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { majorAspectsByOrb } from '../utils/astrology';
 
 const PLANET_INFO = {

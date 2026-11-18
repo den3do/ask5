@@ -13,7 +13,7 @@ import {
   HD_TYPES, HD_AUTH, HD_LINES, HD_CENTER_TEXT, HD_CHANNEL_GIFT, LIFE_CYCLES,
   AS_SIGNS, AS_HOUSE, AS_PLANET, AS_PLANET_IN_HOUSE, AS_VENUS_EL, AS_MARS_EL, AS_MERC_EL, AS_ASPECT, AS_ELEMENT,
 } from '../data/lifeData.js';
-import { HD_CENTERS, HD_CHANNELS } from './humanDesign.js';
+import { HD_CENTERS } from './humanDesign.js';
 import { analyzeDecadals, analyzeYear, sanFangPalaces } from './ziwei.js';
 import { calculateLifeTransits } from './astrology.js';
 import { lunarYearOf } from './lunar.js';

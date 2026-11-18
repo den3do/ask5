@@ -492,94 +492,93 @@ export const detectSpecialPatterns = ({ linesData, pillars, topic = '', ys = nul
   return out;
 };
 
+// ═════════════════════════ 一事一占：吉凶判斷引擎 ═════════════════════════
+// 依據：《黃金策・總斷千金賦》「用神有氣無他故，所作皆成」「有助有扶，衰弱休囚亦吉」
+//       「帶旺匪空」「日辰為六爻之主宰」「用化用，有用無用」「用爻變動，忌遭死墓空絕」
+//       《增刪卜易・元神忌神衰旺章》元神須旺相方能生用神、忌神休囚動亦不能剋用神、
+//       「用神無根，元神有力亦難生」
+//
+// 結構：evaluateDivination 只負責串流程；每一段規則是一個小函式，共用一本「計分本」（score／strengths／warnings／notes）：
+//   pickYongShen        取用神（現身、多現擇優、伏神、以世爻代用）
+//   analyzeContext      算出用神、動爻的各種狀態（純計算，不加分）
+//   scoreYongShenState  用神本身：月建、日辰、月破、日破、旬空；世爻旬空
+//   scoreShiYing        世爻旺衰、用神與世爻、世應
+//   scoreMovingLine     動爻依角色（用神／元神／忌神／世爻）論吉凶
+//   scorePatterns       特殊卦象（六合六沖、反吟伏吟、三合局、暗動）
+//   scoreYouQiBonus     用神有氣無他故，所作皆成
+//   gradeOf / buildCommentary  分數換等級與白話評語
+
+/** 計分本：每段規則往裡面加減分並寫下理由 */
+const newLedger = () => ({
+  score: 0,
+  strengths: [], // 有利
+  warnings: [], // 不利
+  notes: [], // 取用方式等說明，不算有利也不算不利
+  good(points, text) { this.score += points; this.strengths.push(text); },
+  bad(points, text) { this.score -= points; this.warnings.push(text); },
+});
+
+/** 旬空的實際效力：動爻不空、月建所臨不空；日辰沖之為「沖空」（出空而實） */
+const isEffectiveKong = (l, pillars) => l.isKongWang && !l.isMoving && l.branch !== pillars.monthBranch
+  && !(checkBranchInteraction(l.branch, pillars.dayBranch) === '六沖');
+
+/** 單爻強弱（用於用神多現時擇優）：月令旺衰＋日辰生扶，扣月破、空亡 */
+const lineStrength = (l, pillars) => {
+  let s = getWuxingWangShuai(l.wuxing, pillars.monthBranch).score;
+  const rel = WUXING_RELATION[BRANCH_WUXING[pillars.dayBranch]]?.[l.wuxing];
+  s += rel === '生' ? 2 : rel === '比和' ? 1 : rel === '剋' ? -2 : 0;
+  if (l.branch === pillars.yuePoBranch) s -= 6;
+  if (isEffectiveKong(l, pillars)) s -= 5;
+  return s;
+};
+
 /**
- * 【一事一占：吉凶判斷引擎演算法】
- * 根據用神、月建、日辰、動爻、世應評分，產出 7 等級與白話評語
+ * 取用神：只現一爻直接取；多現時動爻優先、再比旺衰（持世同分優先）；
+ * 不現查伏神（本宮八純卦同位之爻）；連伏神都沒有才以世爻代用（降級）。
+ * @returns {{ line: Object, substitute: boolean }}
  */
-export const evaluateDivination = ({
-  topic,
-  pillars,
-  linesData,
-  movingLine,
-  palaceWuxing,
-  originalHex,
-  changedHex,
-  nuclearHex,
-  gender = '男',
-  palaceId = null,
-}) => {
-  const yongShenInfo = getTopicYongShen(topic, gender);
-  const targetRelation = yongShenInfo.relation;
+function pickYongShen({ linesData, pillars, palaceWuxing, palaceId, info, shiLine }, ledger) {
+  const target = info.relation;
+  const candidates = linesData.filter((l) => l.relation === target);
+  if (candidates.length === 1) return { line: candidates[0], substitute: false };
 
-  // 1. 抓出用神爻與世爻
-  const shiLine = linesData.find(l => l.isShi);
-  const yingLine = linesData.find(l => l.isYing);
-  const movingLineData = linesData.find(l => l.isMoving);
-
-  let totalScore = 0;
-  const reasons = [];
-  const warnings = [];
-  const notes = []; // 取用方式等說明，不算有利也不算不利
-  const strengths = [];
-
-  // 旬空的實際效力：動爻不空、月建所臨不空；日辰沖之為「沖空」（出空而實）
-  const effectiveKong = (l) => l.isKongWang && !l.isMoving && l.branch !== pillars.monthBranch
-    && !(checkBranchInteraction(l.branch, pillars.dayBranch) === '六沖');
-  // 單爻強弱（用於用神多現時擇優）：月令旺衰＋日辰生扶，扣月破、空亡
-  const strengthOf = (l) => {
-    let s = getWuxingWangShuai(l.wuxing, pillars.monthBranch).score;
-    const rel = WUXING_RELATION[BRANCH_WUXING[pillars.dayBranch]]?.[l.wuxing];
-    s += rel === '生' ? 2 : rel === '比和' ? 1 : rel === '剋' ? -2 : 0;
-    if (l.branch === pillars.yuePoBranch) s -= 6;
-    if (effectiveKong(l)) s -= 5;
-    return s;
-  };
-
-  const candidates = linesData.filter(l => l.relation === targetRelation);
-  let yongShenLine;
-  let ysSubstitute = false; // 用神不現且無伏神，以世爻代用
-  if (candidates.length === 1) {
-    yongShenLine = candidates[0];
-  } else if (candidates.length > 1) {
-    // 用神多現：動爻優先（發動者為取用對象）；其餘比較旺衰，持世者同分時優先
-    const movers = candidates.filter(l => l.isMoving);
+  if (candidates.length > 1) {
+    const movers = candidates.filter((l) => l.isMoving);
     const pool = movers.length ? movers : candidates;
-    yongShenLine = [...pool].sort((a, b) => (strengthOf(b) + (b.isShi ? 0.5 : 0)) - (strengthOf(a) + (a.isShi ? 0.5 : 0)))[0];
-    notes.push(`卦中【${yongShenInfo.name}】共現 ${candidates.length} 爻（用神多現），已${movers.length ? '以發動者' : '比較月令、日辰旺衰後'}取第 ${yongShenLine.lineNum} 爻為用神；傳統另有「取其旺者」以外的取法，僅供參考。`);
-  } else {
-    // 用神不現：查伏神（本宮八純卦同位之爻），伏於飛神之下
-    const pure = palaceId != null ? NAJIA_TABLE[palaceId] : null;
-    const pureBranches = pure ? [...pure.inner, ...pure.outer] : [];
-    const idx = pureBranches.findIndex((b) => getRelation(palaceWuxing, BRANCH_WUXING[b]) === targetRelation);
-    if (idx >= 0) {
-      const fly = linesData[idx];
-      const b = pureBranches[idx];
-      yongShenLine = {
-        lineNum: idx + 1, branch: b, wuxing: BRANCH_WUXING[b], relation: targetRelation,
-        isKongWang: pillars.kongWang.includes(b), isMoving: false, isShi: false, isFu: true, fly,
-      };
-      notes.push(`卦中【${yongShenInfo.name}】不現，取伏神：${b}${yongShenLine.wuxing}伏於第 ${idx + 1} 爻飛神（${fly.branch}${fly.wuxing}）之下，須待飛神被沖、被剋或空破才易引出，力量較用神現身為弱。`);
-      const f = WUXING_RELATION[fly.wuxing]?.[yongShenLine.wuxing];
-      if (f === '生') { totalScore += 1; strengths.push('飛神生伏神，伏藏之用神得助'); }
-      else if (f === '剋') { totalScore -= 2; warnings.push('飛神剋伏神，伏藏之用神受制難出'); }
-    } else {
-      yongShenLine = shiLine;
-      ysSubstitute = true;
-      notes.push(`卦中【${yongShenInfo.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
-    }
+    const rank = (l) => lineStrength(l, pillars) + (l.isShi ? 0.5 : 0);
+    const line = [...pool].sort((a, b) => rank(b) - rank(a))[0];
+    ledger.notes.push(`卦中【${info.name}】共現 ${candidates.length} 爻（用神多現），已${movers.length ? '以發動者' : '比較月令、日辰旺衰後'}取第 ${line.lineNum} 爻為用神；傳統另有「取其旺者」以外的取法，僅供參考。`);
+    return { line, substitute: false };
   }
 
-  // ===== 用神為一卦之主：先判用神有氣與否，再論元神、忌神 =====
-  // 依據：《黃金策・總斷千金賦》「用神有氣無他故，所作皆成」「有助有扶，衰弱休囚亦吉」
-  //       「帶旺匪空」「日辰為六爻之主宰」「用化用，有用無用」「用爻變動，忌遭死墓空絕」
-  //       《增刪卜易・元神忌神衰旺章》元神須旺相方能生用神、忌神休囚動亦不能剋用神、
-  //       「用神無根，元神有力亦難生」
-  const ys = yongShenLine;
+  const pure = palaceId != null ? NAJIA_TABLE[palaceId] : null;
+  const pureBranches = pure ? [...pure.inner, ...pure.outer] : [];
+  const idx = pureBranches.findIndex((b) => getRelation(palaceWuxing, BRANCH_WUXING[b]) === target);
+  if (idx < 0) {
+    ledger.notes.push(`卦中【${info.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
+    return { line: shiLine, substitute: true };
+  }
+  const fly = linesData[idx];
+  const b = pureBranches[idx];
+  const line = {
+    lineNum: idx + 1, branch: b, wuxing: BRANCH_WUXING[b], relation: target,
+    isKongWang: pillars.kongWang.includes(b), isMoving: false, isShi: false, isFu: true, fly,
+  };
+  ledger.notes.push(`卦中【${info.name}】不現，取伏神：${b}${line.wuxing}伏於第 ${idx + 1} 爻飛神（${fly.branch}${fly.wuxing}）之下，須待飛神被沖、被剋或空破才易引出，力量較用神現身為弱。`);
+  const f = WUXING_RELATION[fly.wuxing]?.[line.wuxing];
+  if (f === '生') ledger.good(1, '飛神生伏神，伏藏之用神得助');
+  else if (f === '剋') ledger.bad(2, '飛神剋伏神，伏藏之用神受制難出');
+  return { line, substitute: false };
+}
+
+/** 用神與動爻的各種狀態（純計算，不加分）；後面每段規則都讀這份 */
+function analyzeContext({ ys, linesData, pillars }) {
   const dayWuxing = BRANCH_WUXING[pillars.dayBranch];
   const lineHasQi = (l) => getWuxingWangShuai(l.wuxing, pillars.monthBranch).score > 0
     || ['生', '比和'].includes(WUXING_RELATION[dayWuxing][l.wuxing]);
 
-  // 動爻分析：依其與用神的關係定角色（用神本身／元神／忌神／其他）
+  // 動爻：依其與用神的關係定角色（用神本身／元神／忌神／其他）
+  const movingLineData = linesData.find((l) => l.isMoving);
   const mv = movingLineData && movingLineData.changed ? movingLineData : null;
   const mvBack = mv ? WUXING_RELATION[mv.changed.wuxing][mv.wuxing] : null; // 變爻對本爻
   const mvAdv = mv ? checkAdvanceOrRetreat(mv.branch, mv.changed.branch) : null;
@@ -590,284 +589,241 @@ export const evaluateDivination = ({
   const mvRole = ysIsMover ? '用神' : mvToYs === '生' ? '元神' : mvToYs === '剋' ? '忌神' : null;
   // 動爻本身有力：旺相或得日辰生扶、且非月破；或動化回頭生／進神
   const mvPowerful = mv ? ((lineHasQi(mv) && mv.branch !== pillars.yuePoBranch) || mvBoost) : false;
-  const mvLabel = mv ? `第 ${mv.lineNum} 爻${mv.branch}${mv.wuxing}` : '';
 
-  // 用神本身狀態
-  const ysMonthStatus = getWuxingWangShuai(ys.wuxing, pillars.monthBranch);
-  const ysDayRelation = WUXING_RELATION[dayWuxing][ys.wuxing]; // 日辰對用神
-  const ysLinRi = ys.branch === pillars.dayBranch;
-  const isYsYuePo = ys.branch === pillars.yuePoBranch;
-  // 旬空之用神逢日沖為「沖空」（出空而實），不另算日破
+  // 用神本身
+  const monthStatus = getWuxingWangShuai(ys.wuxing, pillars.monthBranch);
+  const dayRelation = WUXING_RELATION[dayWuxing][ys.wuxing]; // 日辰對用神
+  const linRi = ys.branch === pillars.dayBranch;
+  const yuePo = ys.branch === pillars.yuePoBranch;
+  // 旬空之用神逢日沖為「沖空」（出空而實），不另算日破；
   // 靜爻被日沖：休囚為「日破」；旺相則為「暗動」（有力，見特殊卦象），不算日破
-  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving && !ys.isKongWang && ysMonthStatus.score <= 0;
-  const ysKong = effectiveKong(ys);
+  const riPo = ys.branch === pillars.riPoBranch && !ys.isMoving && !ys.isKongWang && monthStatus.score <= 0;
+  const kong = isEffectiveKong(ys, pillars);
   // 假空（帶旺匪空）：旺相、得日辰生扶或臨日、得動爻（元神）生；真空：休囚無扶，或月破又落空
-  const daiWang = ysMonthStatus.score > 0 || ysDayRelation === '生' || ysLinRi || mvRole === '元神';
-  const trueKong = ysKong && (!daiWang || isYsYuePo);
-  const daySupport = ysDayRelation === '生' || ysDayRelation === '比和';
+  const daiWang = monthStatus.score > 0 || dayRelation === '生' || linRi || mvRole === '元神';
+  const trueKong = kong && (!daiWang || yuePo);
+  const daySupport = dayRelation === '生' || dayRelation === '比和';
   const selfBoost = ysIsMover && mvBoost;
-  const wuGen = (isYsYuePo || trueKong) && !(daySupport || selfBoost); // 用神無根
+  const wuGen = (yuePo || trueKong) && !(daySupport || selfBoost); // 用神無根
   const yuanSupport = mvRole === '元神' && mvPowerful && !wuGen;
   const hasFu = daySupport || yuanSupport || selfBoost;
-  const youQi = ysMonthStatus.score > 0 || hasFu; // 用神有氣
-  const ysHua = ysIsMover && mvBack !== '剋'
+  const youQi = monthStatus.score > 0 || hasFu; // 用神有氣
+  const hua = ysIsMover && mvBack !== '剋'
     ? (pillars.kongWang.includes(mv.changed.branch) ? '化空' : mv.changed.branch === MU[ys.wuxing] ? '化墓' : mv.changed.branch === JUE[ys.wuxing] ? '化絕' : null)
     : null;
 
-  // (1) 用神月建旺衰（有助有扶則不作休囚論）
-  if (ysMonthStatus.score > 0) {
-    totalScore += ysMonthStatus.score;
-    strengths.push(`用神【${yongShenInfo.name}】得月令(${pillars.monthBranch}月)${ysMonthStatus.status}氣，天時相挺，根基厚實`);
-  } else if (ysMonthStatus.score < 0) {
-    if (hasFu) {
-      const src = [daySupport && '日辰', yuanSupport && '元神發動', selfBoost && '自身動化回頭生／進神'].filter(Boolean).join('、');
-      strengths.push(`用神【${yongShenInfo.name}】雖逢月令${ysMonthStatus.status}氣，但得${src}生扶，「有助有扶，衰弱休囚亦吉」，不作休囚論`);
+  return {
+    mv, mvBack, mvAdv, mvBoost, mvDrain, mvRole, mvPowerful, ysIsMover,
+    mvLabel: mv ? `第 ${mv.lineNum} 爻${mv.branch}${mv.wuxing}` : '',
+    monthStatus, dayRelation, linRi, yuePo, riPo, kong, trueKong, daySupport, selfBoost,
+    wuGen, yuanSupport, hasFu, youQi, hua,
+  };
+}
+
+/** (1)(2) 用神本身：月建旺衰、日辰、月破、日破、旬空；以及世爻旬空 */
+function scoreYongShenState({ ys, info, pillars, shiLine, cx }, ledger) {
+  const { monthStatus } = cx;
+  // 月建旺衰（有助有扶則不作休囚論）
+  if (monthStatus.score > 0) {
+    ledger.good(monthStatus.score, `用神【${info.name}】得月令(${pillars.monthBranch}月)${monthStatus.status}氣，天時相挺，根基厚實`);
+  } else if (monthStatus.score < 0) {
+    if (cx.hasFu) {
+      const src = [cx.daySupport && '日辰', cx.yuanSupport && '元神發動', cx.selfBoost && '自身動化回頭生／進神'].filter(Boolean).join('、');
+      ledger.strengths.push(`用神【${info.name}】雖逢月令${monthStatus.status}氣，但得${src}生扶，「有助有扶，衰弱休囚亦吉」，不作休囚論`);
     } else {
-      totalScore += ysMonthStatus.score;
-      warnings.push(`用神【${yongShenInfo.name}】逢月令${ysMonthStatus.status}氣，又無日辰、元神生扶，外在環境施展受限`);
+      ledger.bad(-monthStatus.score, `用神【${info.name}】逢月令${monthStatus.status}氣，又無日辰、元神生扶，外在環境施展受限`);
     }
   }
 
-  // (2) 用神與日辰（日辰為六爻之主宰，權重不低於月建）
-  if (ysLinRi) {
-    totalScore += 3;
-    strengths.push(`用神臨日辰(${pillars.dayBranch})，日辰為六爻之主宰，得其臨扶，力量極強`);
-  } else if (ysDayRelation === '生') {
-    totalScore += 3;
-    strengths.push(`用神得日辰(${pillars.dayBranch})相生，日辰為六爻之主宰，有暗中貴人相助`);
-  } else if (ysDayRelation === '剋') {
-    totalScore -= 3;
-    warnings.push(`用神遭日辰(${pillars.dayBranch})相剋，日辰為六爻之主宰，行事容易受到突發性阻力`);
-  } else if (ysDayRelation === '比和') {
-    totalScore += 1;
-    strengths.push(`用神與日辰同氣比和，辦事有力`);
+  // 日辰（日辰為六爻之主宰，權重不低於月建）
+  if (cx.linRi) ledger.good(3, `用神臨日辰(${pillars.dayBranch})，日辰為六爻之主宰，得其臨扶，力量極強`);
+  else if (cx.dayRelation === '生') ledger.good(3, `用神得日辰(${pillars.dayBranch})相生，日辰為六爻之主宰，有暗中貴人相助`);
+  else if (cx.dayRelation === '剋') ledger.bad(3, `用神遭日辰(${pillars.dayBranch})相剋，日辰為六爻之主宰，行事容易受到突發性阻力`);
+  else if (cx.dayRelation === '比和') ledger.good(1, '用神與日辰同氣比和，辦事有力');
+
+  if (cx.yuePo) ledger.bad(6, '用神逢【月破】（白話：這一爻被當月的力量正面沖散），猶如枯木逢暴風，目前處於最被動虛弱之時');
+  if (cx.riPo) ledger.bad(3, '用神安靜受日沖為【日破】（白話：這一爻被當天的力量沖到），主心浮氣躁或事有破敗');
+
+  // 旬空（旺相或得日生者為「帶旺匪空」，只是暫緩）
+  if (ys.isKongWang && !cx.kong) {
+    ledger.notes.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
+  }
+  if (cx.kong && !cx.trueKong) {
+    ledger.bad(1, `用神逢旬空，但本身${monthStatus.score > 0 ? '旺相' : cx.mvRole === '元神' ? '得動爻（元神）生扶' : '得日辰生扶'}，屬「假空」、「帶旺匪空」（白話：只是眼下暫緩，不是真的落空），出旬或逢沖之日即可成事`);
+  } else if (cx.trueKong) {
+    ledger.bad(5, `用神【落空亡】且${cx.yuePo ? '又逢月破' : '休囚無扶'}，屬「真空」（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
   }
 
-  // 月破判定
-  if (isYsYuePo) {
-    totalScore -= 6;
-    warnings.push(`用神逢【月破】（白話：這一爻被當月的力量正面沖散），猶如枯木逢暴風，目前處於最被動虛弱之時`);
+  if (isEffectiveKong(shiLine, pillars)) {
+    ledger.bad(4, '世爻（代表你自己）【落空亡】，表示你當下心無著落、猶豫不決，或自顧不暇有心無力');
   }
+}
 
-  // 日破判定
-  if (isYsRiPo) {
-    totalScore -= 3;
-    warnings.push(`用神安靜受日沖為【日破】（白話：這一爻被當天的力量沖到），主心浮氣躁或事有破敗`);
-  }
-
-  // 旬空判定（旺相或得日生者為「帶旺匪空」，只是暫緩）
-  if (ys.isKongWang && !ysKong) {
-    notes.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
-  }
-  if (ysKong && !trueKong) {
-    totalScore -= 1;
-    warnings.push(`用神逢旬空，但本身${ysMonthStatus.score > 0 ? '旺相' : mvRole === '元神' ? '得動爻（元神）生扶' : '得日辰生扶'}，屬「假空」、「帶旺匪空」（白話：只是眼下暫緩，不是真的落空），出旬或逢沖之日即可成事`);
-  } else if (trueKong) {
-    totalScore -= 5;
-    warnings.push(`用神【落空亡】且${isYsYuePo ? '又逢月破' : '休囚無扶'}，屬「真空」（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
-  }
-
-  // 世爻旬空
-  if (effectiveKong(shiLine)) {
-    totalScore -= 4;
-    warnings.push(`世爻（代表你自己）【落空亡】，表示你當下心無著落、猶豫不決，或自顧不暇有心無力`);
-  }
-
-  // (3) 世爻旺衰與用神關係
+/** (3) 世爻旺衰、用神與世爻的生剋、世應關係 */
+function scoreShiYing({ ys, info, pillars, shiLine, yingLine, cx }, ledger) {
   const shiMonthStatus = getWuxingWangShuai(shiLine.wuxing, pillars.monthBranch);
-  totalScore += Math.max(-2, Math.min(2, shiMonthStatus.score));
+  ledger.score += Math.max(-2, Math.min(2, shiMonthStatus.score));
 
-  // 用神與世爻生剋關係
-  const ysToShiRelation = WUXING_RELATION[yongShenLine.wuxing][shiLine.wuxing]; // 用神對世爻
-  if (shiLine.relation === targetRelation) {
-    totalScore += 5;
-    const yongWeak = trueKong || isYsYuePo || !youQi;
-    strengths.push(yongWeak
-      ? `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），主動權在你手上；但這一爻本身力量不足（見不利之處），需等時機補強`
-      : `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），求事在己，主動權在你手上，是有利的格局`);
-  } else if (ysToShiRelation === '生') {
-    totalScore += 4;
-    strengths.push(`用神生世爻（求事生我），代表好處、成果主動送上門，得來輕鬆不費力`);
-  } else if (ysToShiRelation === '剋') {
-    totalScore -= 4;
-    warnings.push(`用神剋世爻，代表求此事物反遭其累，壓力沉重，得不償失`);
-  } else if (WUXING_RELATION[shiLine.wuxing][yongShenLine.wuxing] === '剋') {
-    totalScore += 1;
-    strengths.push(`世爻剋用神（我剋者為財/可駕馭），代表事情需親力親為、耗費一番心力方能克服`);
-  } else if (WUXING_RELATION[shiLine.wuxing][yongShenLine.wuxing] === '生') {
-    totalScore -= 2;
-    warnings.push(`世爻生用神（我生他為洩氣），表示你單方面付出耗損極大，回報恐怕不如預期`);
+  const ysToShi = WUXING_RELATION[ys.wuxing][shiLine.wuxing]; // 用神對世爻
+  const shiToYs = WUXING_RELATION[shiLine.wuxing][ys.wuxing];
+  if (shiLine.relation === info.relation) {
+    const yongWeak = cx.trueKong || cx.yuePo || !cx.youQi;
+    ledger.good(5, yongWeak
+      ? `【${info.name}持世】（白話：你所求的東西就坐在「自己」的位置），主動權在你手上；但這一爻本身力量不足（見不利之處），需等時機補強`
+      : `【${info.name}持世】（白話：你所求的東西就坐在「自己」的位置），求事在己，主動權在你手上，是有利的格局`);
+  } else if (ysToShi === '生') {
+    ledger.good(4, '用神生世爻（求事生我），代表好處、成果主動送上門，得來輕鬆不費力');
+  } else if (ysToShi === '剋') {
+    ledger.bad(4, '用神剋世爻，代表求此事物反遭其累，壓力沉重，得不償失');
+  } else if (shiToYs === '剋') {
+    ledger.good(1, '世爻剋用神（我剋者為財/可駕馭），代表事情需親力親為、耗費一番心力方能克服');
+  } else if (shiToYs === '生') {
+    ledger.bad(2, '世爻生用神（我生他為洩氣），表示你單方面付出耗損極大，回報恐怕不如預期');
   }
 
-  // 世應關係
-  const shiYingRelation = WUXING_RELATION[yingLine.wuxing][shiLine.wuxing];
-  if (shiYingRelation === '生' || shiYingRelation === '比和') {
-    totalScore += 1;
-    strengths.push(`應爻(對方/客體)生扶世爻，人際配合度佳，容易獲得外界奧援`);
-  } else if (shiYingRelation === '剋') {
-    totalScore -= 2;
-    warnings.push(`應爻剋世爻，外在人際或對手態度防備，需防背刺或合作破局`);
+  const shiYing = WUXING_RELATION[yingLine.wuxing][shiLine.wuxing];
+  if (shiYing === '生' || shiYing === '比和') ledger.good(1, '應爻(對方/客體)生扶世爻，人際配合度佳，容易獲得外界奧援');
+  else if (shiYing === '剋') ledger.bad(2, '應爻剋世爻，外在人際或對手態度防備，需防背刺或合作破局');
+}
+
+/** (4) 動爻依角色論吉凶（回頭生剋、進退只對用神、元神、忌神、世爻本身有意義） */
+function scoreMovingLine({ pillars, shiLine, cx }, ledger) {
+  const { mv, mvBack, mvAdv, mvRole, mvLabel } = cx;
+  if (!mv) return;
+  const c = mv.changed;
+  const huaDesc = `${mv.branch}${mv.wuxing}化${c.branch}${c.wuxing}`;
+  const advLine = (text) => (mvAdv.score > 0 ? ledger.strengths : ledger.warnings).push(text);
+
+  if (mvRole === '用神') {
+    // 用神自身發動：用化用，有用無用
+    if (mvBack === '生') ledger.good(5, `用神發動【化回頭生】(${huaDesc})，後勁無窮，越往後發展越好`);
+    else if (mvBack === '剋') ledger.bad(6, `用神發動遭【化回頭剋】(${huaDesc})，先成後敗，過程需嚴防反撲與破壞`);
+    if (mvAdv) {
+      ledger.score += mvAdv.score;
+      advLine(`用神動而【${mvAdv.type}】(${huaDesc})，「用化用，有用無用」，${mvAdv.desc}`);
+    }
+    if (cx.hua) ledger.bad(3, `用神動而【${cx.hua}】(${huaDesc})，「用爻變動，忌遭死墓空絕」，變化之後力量消散，容易竹籃打水一場空`);
+  } else if (mvRole === '元神') {
+    // 元神須旺相方能生用神；用神無根則元神有力亦難生
+    if (cx.wuGen) ledger.notes.push(`元神${mvLabel}發動生用神，但用神月破或真空、又無日辰扶持，「用神無根，元神有力亦難生」，不計加分`);
+    else if (cx.mvPowerful) ledger.good(4, `元神${mvLabel}${cx.mvBoost ? `動化${mvBack === '生' ? '回頭生' : '進神'}` : '旺相有力'}，發動生用神，所求之事得源源生助`);
+    else ledger.good(1, `元神${mvLabel}發動生用神，但元神本身休囚無氣，生之無力，助益有限`);
+  } else if (mvRole === '忌神') {
+    // 忌神旺相方能剋用神；休囚之忌神動亦不足為患
+    if (cx.mvPowerful) ledger.bad(5, `忌神${mvLabel}旺相有力，發動剋用神，所求之事受到實質阻害`);
+    else ledger.bad(1, `忌神${mvLabel}發動剋用神，但忌神休囚無氣，剋之無力，阻力有限`);
+    if (cx.mvBoost) ledger.bad(2, `忌神動化${mvBack === '生' ? '回頭生' : '進神'}(${huaDesc})，剋力更盛`);
+    if (cx.mvDrain) ledger.good(2, `忌神動化${mvBack === '剋' ? '回頭剋' : '退神'}(${huaDesc})，剋力自減`);
   }
 
-  // (4) 動爻：依角色論吉凶（回頭生剋、進退只對用神、元神、忌神、世爻本身有意義）
-  if (mv) {
-    const c = mv.changed;
-    const huaDesc = `${mv.branch}${mv.wuxing}化${c.branch}${c.wuxing}`;
-
-    if (mvRole === '用神') {
-      // 用神自身發動：用化用，有用無用
-      if (mvBack === '生') {
-        totalScore += 5;
-        strengths.push(`用神發動【化回頭生】(${huaDesc})，後勁無窮，越往後發展越好`);
-      } else if (mvBack === '剋') {
-        totalScore -= 6;
-        warnings.push(`用神發動遭【化回頭剋】(${huaDesc})，先成後敗，過程需嚴防反撲與破壞`);
-      }
-      if (mvAdv) {
-        totalScore += mvAdv.score;
-        (mvAdv.score > 0 ? strengths : warnings).push(`用神動而【${mvAdv.type}】(${huaDesc})，「用化用，有用無用」，${mvAdv.desc}`);
-      }
-      if (ysHua) {
-        totalScore -= 3;
-        warnings.push(`用神動而【${ysHua}】(${huaDesc})，「用爻變動，忌遭死墓空絕」，變化之後力量消散，容易竹籃打水一場空`);
-      }
-    } else if (mvRole === '元神') {
-      // 元神須旺相方能生用神；用神無根則元神有力亦難生
-      if (wuGen) {
-        notes.push(`元神${mvLabel}發動生用神，但用神月破或真空、又無日辰扶持，「用神無根，元神有力亦難生」，不計加分`);
-      } else if (mvPowerful) {
-        totalScore += 4;
-        strengths.push(`元神${mvLabel}${mvBoost ? `動化${mvBack === '生' ? '回頭生' : '進神'}` : '旺相有力'}，發動生用神，所求之事得源源生助`);
-      } else {
-        totalScore += 1;
-        strengths.push(`元神${mvLabel}發動生用神，但元神本身休囚無氣，生之無力，助益有限`);
-      }
-    } else if (mvRole === '忌神') {
-      // 忌神旺相方能剋用神；休囚之忌神動亦不足為患
-      if (mvPowerful) {
-        totalScore -= 5;
-        warnings.push(`忌神${mvLabel}旺相有力，發動剋用神，所求之事受到實質阻害`);
-      } else {
-        totalScore -= 1;
-        warnings.push(`忌神${mvLabel}發動剋用神，但忌神休囚無氣，剋之無力，阻力有限`);
-      }
-      if (mvBoost) {
-        totalScore -= 2;
-        warnings.push(`忌神動化${mvBack === '生' ? '回頭生' : '進神'}(${huaDesc})，剋力更盛`);
-      }
-      if (mvDrain) {
-        totalScore += 2;
-        strengths.push(`忌神動化${mvBack === '剋' ? '回頭剋' : '退神'}(${huaDesc})，剋力自減`);
-      }
+  // 世爻（代表自己）發動而非用神：看自身動變
+  if (mv.isShi && mvRole !== '用神') {
+    if (mvBack === '生') ledger.good(2, `世爻發動化回頭生(${huaDesc})，自身後勁漸足`);
+    else if (mvBack === '剋') ledger.bad(3, `世爻發動化回頭剋(${huaDesc})，自身反受其累`);
+    if (mvAdv) {
+      ledger.score += mvAdv.score > 0 ? 2 : -2;
+      advLine(`世爻動而【${mvAdv.type}】，${mvAdv.desc}`);
     }
-
-    // 世爻（代表自己）發動而非用神：看自身動變
-    if (mv.isShi && mvRole !== '用神') {
-      if (mvBack === '生') {
-        totalScore += 2;
-        strengths.push(`世爻發動化回頭生(${huaDesc})，自身後勁漸足`);
-      } else if (mvBack === '剋') {
-        totalScore -= 3;
-        warnings.push(`世爻發動化回頭剋(${huaDesc})，自身反受其累`);
-      }
-      if (mvAdv) {
-        totalScore += mvAdv.score > 0 ? 2 : -2;
-        (mvAdv.score > 0 ? strengths : warnings).push(`世爻動而【${mvAdv.type}】，${mvAdv.desc}`);
-      }
-      if (pillars.kongWang.includes(c.branch)) {
-        totalScore -= 2;
-        warnings.push(`世爻動化空亡，自身心力虛散、有心無力`);
-      }
-    }
-
-    // 動爻對世爻之作用
-    const movToShi = WUXING_RELATION[mv.wuxing][shiLine.wuxing];
-    if (movToShi === '生' && !mv.isShi) {
-      totalScore += 3;
-      strengths.push(`動爻生扶世爻，事態發展過程中會出現意料之外的助力`);
-    } else if (movToShi === '剋' && !mv.isShi) {
-      totalScore -= 4;
-      warnings.push(`動爻剋傷世爻，中途容易殺出程咬金，令你措手不及`);
-    }
+    if (pillars.kongWang.includes(c.branch)) ledger.bad(2, '世爻動化空亡，自身心力虛散、有心無力');
   }
 
-  // (4b) 特殊卦象：六合／六沖、反吟伏吟、三合局、暗動（依所問主題定吉凶）
-  const patterns = detectSpecialPatterns({ linesData, pillars, topic, ys: ysSubstitute ? null : ys });
+  // 動爻對世爻之作用
+  const movToShi = WUXING_RELATION[mv.wuxing][shiLine.wuxing];
+  if (movToShi === '生' && !mv.isShi) ledger.good(3, '動爻生扶世爻，事態發展過程中會出現意料之外的助力');
+  else if (movToShi === '剋' && !mv.isShi) ledger.bad(4, '動爻剋傷世爻，中途容易殺出程咬金，令你措手不及');
+}
+
+/** (4b) 特殊卦象：六合／六沖、反吟伏吟、三合局、暗動（依所問主題定吉凶） */
+function scorePatterns({ linesData, pillars, topic, ys, substitute }, ledger) {
+  const patterns = detectSpecialPatterns({ linesData, pillars, topic, ys: substitute ? null : ys });
   for (const pt of patterns) {
-    totalScore += pt.score;
+    ledger.score += pt.score;
     const line = `【${pt.name}】${pt.plain}`;
-    if (pt.score > 0) strengths.push(line);
-    else if (pt.score < 0) warnings.push(line);
-    else notes.push(line);
+    if (pt.score > 0) ledger.strengths.push(line);
+    else if (pt.score < 0) ledger.warnings.push(line);
+    else ledger.notes.push(line);
   }
+  return patterns;
+}
 
-  // (5) 用神有氣無他故，所作皆成
-  const hasGu = isYsYuePo || isYsRiPo || ysKong
-    || (ysIsMover && (mvDrain || !!ysHua))
-    || (mvRole === '忌神' && mvPowerful);
-  if (youQi && !ys.isFu && !ysSubstitute && !hasGu) {
-    totalScore += 4;
-    strengths.push(`【用神有氣無他故，所作皆成】：用神${ysMonthStatus.score > 0 ? '旺相' : '得生扶'}，又無破、空、剋害，全卦主軸穩固，所求之事根基紮實`);
+/** (5) 用神有氣無他故，所作皆成 */
+function scoreYouQiBonus({ ys, substitute, cx }, ledger) {
+  const hasGu = cx.yuePo || cx.riPo || cx.kong
+    || (cx.ysIsMover && (cx.mvDrain || !!cx.hua))
+    || (cx.mvRole === '忌神' && cx.mvPowerful);
+  if (cx.youQi && !ys.isFu && !substitute && !hasGu) {
+    ledger.good(4, `【用神有氣無他故，所作皆成】：用神${cx.monthStatus.score > 0 ? '旺相' : '得生扶'}，又無破、空、剋害，全卦主軸穩固，所求之事根基紮實`);
   }
+}
 
-  // 映射 7 個等級
-  let level = '平';
-  let badgeClass = 'bg-stone-500 text-white';
-  let advice = '';
+/** 總分 → 七個等級（門檻、徽章顏色、建議） */
+const GRADES = [
+  { min: 12, level: '大吉', badgeClass: 'bg-emerald-600 text-white', advice: '天時地利人和皆具，此時正是乘風破浪之大好良機！請堅定目標、大步前行，必能大有收穫。' },
+  { min: 7, level: '吉', badgeClass: 'bg-green-600 text-white', advice: '卦氣流通有力，整體朝正面態勢進展。按部就班執行既定計畫，成功指日可待。' },
+  { min: 2, level: '小吉', badgeClass: 'bg-teal-600 text-white', advice: '雖有小成或微利，但過程仍有些許阻絆。建議沉住氣，一步一腳印，不可貪急躁進。' },
+  { min: -1, level: '平', badgeClass: 'bg-stone-500 text-white', advice: '形勢處於多空拉鋸或僵持階段，不宜過度冒進。宜養精蓄銳、暗中打底，靜候下一個轉折契機。' },
+  { min: -5, level: '小凶', badgeClass: 'bg-amber-600 text-white', advice: '阻力漸顯，容易有暗虧或無謂的耗損。建議保守觀望，檢視防範漏洞，勿因面子硬撐。' },
+  { min: -10, level: '凶', badgeClass: 'bg-orange-600 text-white', advice: '局勢受制嚴重，勞多獲少且易生波折。強求恐招損失，及時止損或暫退一步方為上策。' },
+  { min: -Infinity, level: '大凶', badgeClass: 'bg-rose-700 text-white', advice: '動靜皆困，防禦第一！此刻切忌進行重大決策或投資，宜修身守靜、尋求專業貴人庇護以避災殃。' },
+];
+export const gradeOf = (score) => GRADES.find((g) => score >= g.min);
 
-  if (totalScore >= 12) {
-    level = '大吉';
-    badgeClass = 'bg-emerald-600 text-white';
-    advice = '天時地利人和皆具，此時正是乘風破浪之大好良機！請堅定目標、大步前行，必能大有收穫。';
-  } else if (totalScore >= 7) {
-    level = '吉';
-    badgeClass = 'bg-green-600 text-white';
-    advice = '卦氣流通有力，整體朝正面態勢進展。按部就班執行既定計畫，成功指日可待。';
-  } else if (totalScore >= 2) {
-    level = '小吉';
-    badgeClass = 'bg-teal-600 text-white';
-    advice = '雖有小成或微利，但過程仍有些許阻絆。建議沉住氣，一步一腳印，不可貪急躁進。';
-  } else if (totalScore >= -1) {
-    level = '平';
-    badgeClass = 'bg-stone-500 text-white';
-    advice = '形勢處於多空拉鋸或僵持階段，不宜過度冒進。宜養精蓄銳、暗中打底，靜候下一個轉折契機。';
-  } else if (totalScore >= -5) {
-    level = '小凶';
-    badgeClass = 'bg-amber-600 text-white';
-    advice = '阻力漸顯，容易有暗虧或無謂的耗損。建議保守觀望，檢視防範漏洞，勿因面子硬撐。';
-  } else if (totalScore >= -10) {
-    level = '凶';
-    badgeClass = 'bg-orange-600 text-white';
-    advice = '局勢受制嚴重，勞多獲少且易生波折。強求恐招損失，及時止損或暫退一步方為上策。';
-  } else {
-    level = '大凶';
-    badgeClass = 'bg-rose-700 text-white';
-    advice = '動靜皆困，防禦第一！此刻切忌進行重大決策或投資，宜修身守靜、尋求專業貴人庇護以避災殃。';
-  }
-
-  // 組合生動通順的白話文評語
+/** 組合白話評語：先說怎麼讀（吉凶互見與否），再列有利、不利、取用說明與建議 */
+function buildCommentary({ topic, score, level, advice, strengths, warnings, notes }) {
   const clean = (s) => s.replace(/[！!。；\s]+$/, '');
   const mixed = strengths.length > 0 && warnings.length > 0;
   const summary = mixed
-    ? `這一卦「吉凶互見」：有 ${strengths.length} 項有利、${warnings.length} 項不利，兩邊相抵後${totalScore >= 2 ? '仍偏向有利' : totalScore <= -2 ? '整體偏向不利' : '大致持平'}（總分 ${totalScore}），請連同下方細項一起看，不要只看標題。`
+    ? `這一卦「吉凶互見」：有 ${strengths.length} 項有利、${warnings.length} 項不利，兩邊相抵後${score >= 2 ? '仍偏向有利' : score <= -2 ? '整體偏向不利' : '大致持平'}（總分 ${score}），請連同下方細項一起看，不要只看標題。`
     : strengths.length > 0
       ? `這一卦以有利因素為主（${strengths.length} 項有利、無明顯不利）。`
       : warnings.length > 0
         ? `這一卦以不利因素為主（${warnings.length} 項不利、無明顯有利）。`
         : '這一卦沒有明顯的有利或不利因素。';
-  const commentaryParts = [
-    `【斷語結論】：占問【${topic}】，全卦總結為【${level}】之象（綜合卦氣得分：${totalScore}分）。`,
+  const fullCommentary = [
+    `【斷語結論】：占問【${topic}】，全卦總結為【${level}】之象（綜合卦氣得分：${score}分）。`,
     `【怎麼讀這個結果】：${summary}`,
     `【有利之處】：${strengths.length > 0 ? strengths.map(clean).join('；') + '。' : '目前時機平平，未見顯著外力加持。'}`,
     warnings.length > 0 ? `【不利之處】：${warnings.map(clean).join('；')}。` : '【不利之處】：盤面未見重大沖煞剋害，外部阻力較輕。',
     notes.length > 0 ? `【取用說明】：${notes.map(clean).join('；')}。` : null,
-    `【建議】：${advice}`
-  ].filter(Boolean);
+    `【建議】：${advice}`,
+  ].filter(Boolean).join('\n\n');
+  return { summary, mixed, fullCommentary };
+}
 
-  const fullCommentary = commentaryParts.join('\n\n');
+/**
+ * 【一事一占：吉凶判斷引擎】
+ * 根據用神、月建、日辰、動爻、世應、特殊卦象評分，產出 7 等級與白話評語。
+ * （originalHex／changedHex／nuclearHex／movingLine 為舊呼叫端相容而保留，判斷只讀 linesData）
+ */
+export const evaluateDivination = ({
+  topic,
+  pillars,
+  linesData,
+  palaceWuxing,
+  gender = '男',
+  palaceId = null,
+}) => {
+  const info = getTopicYongShen(topic, gender);
+  const shiLine = linesData.find((l) => l.isShi);
+  const yingLine = linesData.find((l) => l.isYing);
+  const ledger = newLedger();
+
+  const { line: ys, substitute } = pickYongShen({ linesData, pillars, palaceWuxing, palaceId, info, shiLine }, ledger);
+  const cx = analyzeContext({ ys, linesData, pillars });
+  const ctx = { ys, info, substitute, pillars, linesData, topic, shiLine, yingLine, cx };
+
+  scoreYongShenState(ctx, ledger);
+  scoreShiYing(ctx, ledger);
+  scoreMovingLine(ctx, ledger);
+  const patterns = scorePatterns(ctx, ledger);
+  scoreYouQiBonus(ctx, ledger);
+
+  const { score, strengths, warnings, notes } = ledger;
+  const { level, badgeClass, advice } = gradeOf(score);
+  const { summary, mixed, fullCommentary } = buildCommentary({ topic, score, level, advice, strengths, warnings, notes });
 
   return {
-    score: totalScore,
+    score,
     level,
     badgeClass,
     strengths,
@@ -879,18 +835,18 @@ export const evaluateDivination = ({
     fullCommentary,
     patterns,
     yongShen: {
-      name: yongShenInfo.name,
-      relation: targetRelation,
-      lineNum: yongShenLine.lineNum,
-      branch: yongShenLine.branch,
-      wuxing: yongShenLine.wuxing,
-      status: ysMonthStatus.status,
-      youQi,
-      isFu: !!yongShenLine.isFu,
-      isSubstitute: ysSubstitute,
-      isKongWang: !!yongShenLine.isKongWang,
-      isYuePo: isYsYuePo
-    }
+      name: info.name,
+      relation: info.relation,
+      lineNum: ys.lineNum,
+      branch: ys.branch,
+      wuxing: ys.wuxing,
+      status: cx.monthStatus.status,
+      youQi: cx.youQi,
+      isFu: !!ys.isFu,
+      isSubstitute: substitute,
+      isKongWang: !!ys.isKongWang,
+      isYuePo: cx.yuePo,
+    },
   };
 };
 
@@ -912,10 +868,6 @@ export const generateDestinyReport = ({
   const shiLine = linesData.find(l => l.isShi) || linesData[0];
   const yingLine = linesData.find(l => l.isYing) || linesData[3];
   const caiLines = linesData.filter(l => l.relation === '妻財');
-  const guanLines = linesData.filter(l => l.relation === '官鬼');
-  const ziSunLines = linesData.filter(l => l.relation === '子孫');
-  const xiongDiLines = linesData.filter(l => l.relation === '兄弟');
-  const fuMuLines = linesData.filter(l => l.relation === '父母');
 
   const shiWuxing = shiLine.wuxing;
   const shiRelation = shiLine.relation;

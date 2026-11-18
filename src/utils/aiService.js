@@ -48,9 +48,9 @@ const readKey = (k) => safe(() => sessionStorage.getItem(k)) || '';
 /** 錯誤訊息可能回顯金鑰：顯示前遮蔽金鑰樣式字串並限制長度 */
 export function redactSecrets(text) {
   return String(text ?? '')
-    .replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza***')
-    .replace(/sk-[A-Za-z0-9_\-]{10,}/g, 'sk-***')
-    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer ***')
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, 'AIza***')
+    .replace(/sk-[A-Za-z0-9_-]{10,}/g, 'sk-***')
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer ***')
     .slice(0, 300);
 }
 
@@ -111,45 +111,34 @@ export function clearAiKeys() {
 /**
  * 快速連線測試 (Ping)
  */
-export function testAiConnection({ provider, apiKey, model }) {
+export async function testAiConnection({ provider, apiKey, model }) {
   const pingMessage = [{ role: 'user', content: '請只回覆「連線成功」四個字' }];
-  let testModel = model;
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('未輸入 API Key，請先填入金鑰');
+  }
 
-  return new Promise(async (resolve, reject) => {
-    try {
-      if (!apiKey || !apiKey.trim()) {
-        throw new Error('未輸入 API Key，請先填入金鑰');
-      }
-
-      let receivedText = '';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時
-
-      await streamAiCompletion({
-        provider,
-        apiKey: apiKey.trim(),
-        model: testModel,
-        messages: pingMessage,
-        signal: controller.signal,
-        onChunk: (chunk) => {
-          receivedText += chunk;
-        },
-      });
-
-      clearTimeout(timeoutId);
-      if (receivedText.length > 0) {
-        resolve({ success: true, message: receivedText.trim() });
-      } else {
-        throw new Error('模型未回傳任何內容');
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        reject(new Error('連線逾時（超過 15 秒未響應）'));
-      } else {
-        reject(err);
-      }
-    }
-  });
+  let receivedText = '';
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超時
+  try {
+    await streamAiCompletion({
+      provider,
+      apiKey: apiKey.trim(),
+      model,
+      messages: pingMessage,
+      signal: controller.signal,
+      onChunk: (chunk) => {
+        receivedText += chunk;
+      },
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('連線逾時（超過 15 秒未響應）');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId); // 出錯時也要清掉計時器
+  }
+  if (!receivedText.length) throw new Error('模型未回傳任何內容');
+  return { success: true, message: receivedText.trim() };
 }
 
 /**

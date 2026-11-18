@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Compass, Shield, User, Info, ArrowUpRight } from 'lucide-react';
+import { Compass } from 'lucide-react';
 import { ZIWEI_GRID_LAYOUT } from '../utils/ziwei';
 import { describePalace } from '../utils/lifeReading';
 
@@ -15,7 +15,6 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
   if (!astrolabeData) return null;
 
   const {
-    raw,
     chineseDate,
     fiveElementsClass,
     soul,

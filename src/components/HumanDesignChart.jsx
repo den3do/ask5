@@ -18,7 +18,6 @@ export default function HumanDesignChart({ hdData, personName = '命主' }) {
 
   const { typeInfo, profileInfo, definedChannels, centers, conscious, unconscious, authority, definition } = hdData;
 
-  const definedChannelSet = new Set(definedChannels.map(ch => `${ch.gates[0]}-${ch.gates[1]}`));
 
   return (
     <div className="space-y-6 font-sans text-sm">

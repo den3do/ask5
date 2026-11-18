@@ -10,7 +10,6 @@ import {
   Loader2,
   ExternalLink,
   Save,
-  HelpCircle
 } from 'lucide-react';
 import {
   AI_PROVIDERS,

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/verify-engine.mjs && node scripts/verify-reading.mjs && node scripts/verify-mbti.mjs && node scripts/verify-time.mjs && node scripts/verify-astro-ziwei.mjs && node scripts/verify-synastry-fusion.mjs"
+    "lint": "eslint .",
+    "test": "eslint . && node scripts/verify-engine.mjs && node scripts/verify-reading.mjs && node scripts/verify-mbti.mjs && node scripts/verify-time.mjs && node scripts/verify-astro-ziwei.mjs && node scripts/verify-synastry-fusion.mjs"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",
@@ -19,10 +20,15 @@
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.4.0",
     "lunar-typescript": "^1.8.7",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
