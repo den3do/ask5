@@ -14,6 +14,7 @@ import { chineseClock } from './utils/chineseTime';
 import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
 import NajiaTable from './components/NajiaTable';
+import HelpButton from './components/HelpButton';
 const PersonalHub = lazy(() => import('./components/PersonalHub'));
 const SynastryReport = lazy(() => import('./components/SynastryReport'));
 const MbtiTest = lazy(() => import('./components/MbtiTest'));
@@ -105,6 +106,10 @@ const DivinationApp = () => {
 
     if (isNaN(n1) || isNaN(n2) || isNaN(n3)) {
       setDivError('請把三個數字都填好（例如：3、4、5）。想不到數字？按旁邊的「隨機起卦」即可。');
+      return;
+    }
+    if (n1 < 1 || n2 < 1 || n3 < 1) {
+      setDivError('三個數字都要是 1 以上的正整數（例如：3、4、5）。');
       return;
     }
     setDivError('');
@@ -328,6 +333,7 @@ ${linesStr}
           <div className="space-y-8 animate-fadeIn">
             {/* 說明引言 */}
             <div className="bg-amber-50 border-l-4 border-amber-600 p-4 rounded-r-lg text-stone-800 text-sm leading-relaxed shadow-sm">
+              <HelpButton topic="divination" className="float-right ml-3 mb-1" />
               <span className="font-bold text-amber-900">【一事一占說明】：</span>
               梅花起卦法配合六爻納甲排盤。請心懷所問之事，輸入三個直覺靈感數字（例如：3, 4, 5）。
               系統將自動排出四柱干支、主卦、變卦、互卦，並根據六爻旺衰、動變生剋及回頭生剋進行加權評分，輸出吉凶等級與詳細白話評語。
@@ -434,6 +440,8 @@ ${linesStr}
                   <div className="flex flex-wrap items-center gap-3">
                     <input
                       type="number"
+                      min="1"
+                      step="1"
                       value={divInputs.num1}
                       onChange={(e) => setDivInputs({ ...divInputs, num1: e.target.value })}
                       placeholder="數字一 (上卦)"
@@ -442,6 +450,8 @@ ${linesStr}
                     <span className="text-stone-400 font-bold">+</span>
                     <input
                       type="number"
+                      min="1"
+                      step="1"
                       value={divInputs.num2}
                       onChange={(e) => setDivInputs({ ...divInputs, num2: e.target.value })}
                       placeholder="數字二 (下卦)"
@@ -450,6 +460,8 @@ ${linesStr}
                     <span className="text-stone-400 font-bold">+</span>
                     <input
                       type="number"
+                      min="1"
+                      step="1"
                       value={divInputs.num3}
                       onChange={(e) => setDivInputs({ ...divInputs, num3: e.target.value })}
                       placeholder="數字三 (動爻)"

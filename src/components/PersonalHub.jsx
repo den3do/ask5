@@ -1,6 +1,7 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import BirthForm from './BirthForm';
+import HelpButton from './HelpButton';
 import { DEFAULT_BIRTH, computeFullProfile } from '../utils/profile';
 
 // 面板背後掛著重型引擎（iztro 紫微、astronomy-engine 占星），改為點到哪個分頁才載入，避免拖慢首屏
@@ -41,8 +42,11 @@ export default function PersonalHub({ onOpenSettings }) {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg px-4 py-3 text-xs font-sans">
-        ⚠ 目前預填的是<b>範例生辰</b>，不是你的資料。請改成你的出生日期、時間與地點，再按「排出命盤」。
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex-1 min-w-[16rem] bg-amber-50 border border-amber-300 text-amber-900 rounded-lg px-4 py-3 text-xs font-sans">
+          ⚠ 目前預填的是<b>範例生辰</b>，不是你的資料。請改成你的出生日期、時間與地點，再按「排出命盤」。
+        </div>
+        <HelpButton topic="personal" label="個人命理說明" className="mt-1.5" />
       </div>
       <BirthForm title="個人生辰（輸入一次，四大系統共用）" value={birth} onChange={setBirth} />
 
@@ -79,7 +83,8 @@ export default function PersonalHub({ onOpenSettings }) {
             </ul>
           </details>
           <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-stone-100/95 backdrop-blur border-b border-stone-200">
-            <div role="tablist" aria-label="命理系統" className="flex gap-1.5 overflow-x-auto pb-0.5 font-sans">
+            <div className="flex items-center gap-2">
+            <div role="tablist" aria-label="命理系統" className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto pb-0.5 font-sans">
               {SUBTABS.map((t) => (
                 <button
                   key={t.id}
@@ -95,6 +100,8 @@ export default function PersonalHub({ onOpenSettings }) {
                   {t.emoji} {t.label}
                 </button>
               ))}
+            </div>
+            <HelpButton topic={sub} label={`${SUBTABS.find((t) => t.id === sub)?.label}說明`} className="shrink-0" />
             </div>
           </div>
           {Active && (

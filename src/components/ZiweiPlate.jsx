@@ -70,7 +70,8 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
             if (!palace) return null;
 
             const isSelected = selectedBranch === branch;
-            const isSoul = palace.isOriginalPalace || palace.name === '命宮';
+            // iztro 的 isOriginalPalace 是「來因宮」，不是命宮；命宮只看宮名
+            const isSoul = palace.name === '命宮';
             const isBody = palace.isBodyPalace;
             const diff = (BRS.indexOf(branch) - BRS.indexOf(selectedBranch) + 12) % 12;
             const rel = diff === 6 ? 'opp' : diff === 4 || diff === 8 ? 'tri' : null;
@@ -128,7 +129,7 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                       {palace.majorStars.map((star, idx) => (
                         <div key={idx} className="flex items-center text-base">
                           <span className={`font-black ${
-                            star.isMajor ? 'text-amber-300' : 'text-slate-200'
+                            star.type === 'major' || star.isMajor ? 'text-amber-300' : 'text-slate-200'
                           }`}>
                             {star.name}
                           </span>
@@ -237,9 +238,14 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
               <span className="text-xs text-stone-400 font-mono px-2 py-0.5 rounded bg-stone-800">
                 {selectedPalace.heavenlyStem}{selectedPalace.earthlyBranch}位
               </span>
-              {selectedPalace.isOriginalPalace && (
+              {selectedPalace.name === '命宮' && (
                 <span className="text-xs bg-red-600/30 text-red-300 border border-red-500/30 px-2 py-0.5 rounded">
                   本命命宮
+                </span>
+              )}
+              {selectedPalace.isOriginalPalace && (
+                <span className="text-xs bg-amber-600/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded" title="宮干與出生年干相同的宮位（子、丑兩宮除外），與命宮不同">
+                  來因宮
                 </span>
               )}
               {selectedPalace.isBodyPalace && (

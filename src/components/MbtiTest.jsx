@@ -4,6 +4,7 @@ import { DIMENSIONS, MODES, FN_NAMES } from '../data/mbti';
 import { Explainer, SectionTitle } from './ui';
 import { DETAIL, LETTER_NOTES } from '../data/mbtiDetail';
 import MbtiMatch from './MbtiMatch';
+import HelpButton from './HelpButton';
 import {
   getQuestions, interleave, scoreMbti, strengthLabel,
   buildRecord, parseRecord, buildReportText,
@@ -205,6 +206,7 @@ export default function MbtiTest() {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex gap-1 rounded-lg bg-stone-100 p-1 font-sans w-fit">
         {[['test', '人格測驗'], ['match', '配對相處指南']].map(([id, label]) => (
           <button
@@ -215,6 +217,8 @@ export default function MbtiTest() {
             {label}
           </button>
         ))}
+      </div>
+      <HelpButton topic="mbti" label="MBTI 說明" />
       </div>
 
       {view === 'match' && <MbtiMatch myType={current?.type || ''} myName={current && current.name !== '未命名' ? current.name : ''} />}

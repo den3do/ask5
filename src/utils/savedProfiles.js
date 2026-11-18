@@ -29,7 +29,13 @@ export function parseBirthProfile(text, template) {
     const v = rec.birth[k];
     if (v === undefined || v === null) continue;
     if (typeof v === 'object') continue;
-    birth[k] = typeof template[k] === 'boolean' ? Boolean(v) : typeof template[k] === 'number' ? Number(v) : String(v);
+    // 出生地：城市序號或自訂經緯度（'custom'），不能一律轉成數字，否則自訂地點會變成 NaN、被默默改回台北
+    if (k === 'cityIdx') {
+      if (v === 'custom') birth[k] = 'custom';
+      else if (Number.isFinite(Number(v))) birth[k] = Number(v);
+      continue;
+    }
+    birth[k] =typeof template[k] === 'boolean' ? Boolean(v) : typeof template[k] === 'number' ? Number(v) : String(v);
   }
   if (!Object.keys(birth).length) return { ok: false, error: '存檔內沒有可用的生辰資料' };
   return { ok: true, birth };

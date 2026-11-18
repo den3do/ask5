@@ -6,7 +6,8 @@ import { chineseClock } from './chineseTime.js';
 //   下卦 = 農曆月 % 8（餘 0 = 坤）
 //   動爻 = 時支數（子1…亥12）% 6（餘 0 = 6）；無時辰則無動爻
 // 回傳的卦序號沿用 TRIGRAMS 的 key（乾1 兌2 離3 震4 巽5 坎6 艮7 坤0）。
-export function weixinMingGua({ calendarType, year, month, day, hour, moment }) {
+export function weixinMingGua({ calendarType, year, month, day, hour, moment, timeKnown }) {
+  const noTime = timeKnown === false || timeKnown === 'false'; // 出生時間不詳：不取時辰、不排動爻
   let lm = Number(month);
   let ld = Number(day);
   let hourIdx = null;
@@ -16,7 +17,7 @@ export function weixinMingGua({ calendarType, year, month, day, hour, moment }) 
     const l = solarToLunar(c.year, c.month, c.day);
     lm = l.lunarMonth;
     ld = l.lunarDay;
-    hourIdx = c.hourIdx;
+    hourIdx = noTime ? null : c.hourIdx;
   } else {
     const h = hour === '' || hour == null ? null : Number(hour);
     const hasH = h !== null && !Number.isNaN(h);
@@ -31,6 +32,7 @@ export function weixinMingGua({ calendarType, year, month, day, hour, moment }) 
     }
   }
   let movingLine = null;
+  if (noTime) hourIdx = null;
   if (hourIdx !== null) {
     movingLine = (hourIdx + 1) % 6 || 6; // 子=1 … 亥=12
   }
@@ -57,7 +59,8 @@ import { calculatePillars } from './lunar.js';
 
 export function buildWeixinChart(birth, upId, loId, movingLine) {
   const c = birth.moment?.chinese || chineseClock(birth.year, birth.month, birth.day, birth.hour);
-  const pillars = calculatePillars(c.year, c.month, c.day, c.hourIdx, { utc: birth.moment?.utc });
+  const noTime = birth.timeKnown === false || birth.timeKnown === 'false';
+  const pillars = calculatePillars(c.year, c.month, c.day, noTime ? null : c.hourIdx, { utc: birth.moment?.utc });
   const board = buildNajiaBoard({ upId, loId, moving: movingLine || null, pillars });
   return { lines: board.linesData, pillars, palace: board.palaceInfo, fuShen: board.fuShen, board };
 }

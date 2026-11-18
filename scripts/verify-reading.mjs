@@ -6,9 +6,11 @@
 import { lunarYearOf, baziYearOf, calculatePillars } from '../src/utils/lunar.js';
 import { analyzeBazi, compareBazi } from '../src/utils/bazi.js';
 import { calculateZiweiAstrolabe, analyzeDecadals } from '../src/utils/ziwei.js';
-import { evaluateDivination, getTopicYongShen, buildDivinationBoard, buildNajiaBoard } from '../src/utils/iching.js';
+import { evaluateDivination, getTopicYongShen, buildDivinationBoard, buildNajiaBoard, getWuxingWangShuai } from '../src/utils/iching.js';
 import { computeDestiny } from '../src/utils/destiny.js';
-import { buildWeixinChart } from '../src/utils/weixin.js';
+import { buildWeixinChart, weixinMingGua } from '../src/utils/weixin.js';
+import { computeFullProfile, DEFAULT_BIRTH } from '../src/utils/profile.js';
+import { parseBirthProfile, FILE_TAG } from '../src/utils/savedProfiles.js';
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log('✗ FAIL', m); } else console.log('✓', m); };
@@ -115,6 +117,12 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   ok(jiStrong.warnings.some((w) => w.includes('剋力更盛')) && jiStrong.score < noMove.score, `忌神旺動化回頭生 → 剋力更盛（${jiStrong.score} < ${noMove.score}）`);
 }
 
+// 7c. 旺相休囚死：剋令者囚、令剋者死
+{
+  ok(getWuxingWangShuai('木', '申').status === '死' && getWuxingWangShuai('木', '申').score === -3, '木在申月（月令剋我）→ 死 −3');
+  ok(getWuxingWangShuai('木', '辰').status === '囚' && getWuxingWangShuai('木', '辰').score === -2, '木在辰月（我剋月令）→ 囚 −2');
+}
+
 // 8. 八字合婚
 {
   const A = { dayStem: '甲', dayBranch: '子', yearBranch: '子' };
@@ -165,6 +173,31 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   ok(dst.moving >= 1 && dst.moving <= 6 && dst.linesData.filter((l) => l.isMoving).length === 1 && Array.isArray(dst.fuShen), `易經命卦帶動爻（第 ${dst.moving} 爻）與伏神資料`);
   const wx = buildWeixinChart({ year: 1990, month: 6, day: 15, hour: 12 }, 0, 3, 2);
   ok(wx.lines.length === 6 && wx.lines[1].isMoving && wx.fuShen.some((f) => f.relation === '妻財'), '唯心宗命卦：地火明夷二爻動，含妻財伏神');
+
+  // 出生時間不詳：唯心宗不排動爻、不出時柱
+  const pu = computeFullProfile({ ...DEFAULT_BIRTH, timeKnown: false });
+  const wu = weixinMingGua(pu.birth);
+  const cu = buildWeixinChart(pu.birth, wu.upperId, wu.lowerId, wu.movingLine);
+  ok(wu.movingLine === null && cu.lines.every((l) => !l.isMoving) && cu.pillars.hour === '未明', '唯心宗：出生時間不詳 → 無動爻、時柱未明');
+  const pk = computeFullProfile({ ...DEFAULT_BIRTH, timeKnown: true });
+  ok(weixinMingGua(pk.birth).movingLine !== null, '唯心宗：有出生時間 → 依時辰定動爻');
+}
+
+// 11. 一事一占：負數輸入不會排出不存在的卦
+{
+  const pillars = { dayStem: '甲', kongWang: [], yuePoBranch: '午', riPoBranch: '子' };
+  let b = null;
+  try { b = buildDivinationBoard({ num1: -3, num2: 16, num3: -1, pillars }); } catch { /* 下方判定失敗 */ }
+  ok(b && b.linesData.length === 6 && b.moving >= 1 && b.moving <= 6, `負數取正餘數仍可排盤（得 ${b?.originalHex.name}、第 ${b?.moving} 爻動）`);
+}
+
+// 12. 生辰存檔：自訂出生地讀回不會變成 NaN
+{
+  const rec = JSON.stringify({ app: FILE_TAG, birth: { ...DEFAULT_BIRTH, cityIdx: 'custom', customLat: '30.66', customLon: '104.06' } });
+  const r = parseBirthProfile(rec, DEFAULT_BIRTH);
+  ok(r.ok && r.birth.cityIdx === 'custom' && r.birth.customLon === '104.06', '存檔讀回：自訂出生地保留 custom 與經緯度');
+  const r2 = parseBirthProfile(JSON.stringify({ app: FILE_TAG, birth: { ...DEFAULT_BIRTH, cityIdx: '5' } }), DEFAULT_BIRTH);
+  ok(r2.ok && r2.birth.cityIdx === 5, '存檔讀回：城市序號仍轉成數字');
 }
 
 console.log(fail ? `\n${fail} 項失敗` : '\n全部通過');

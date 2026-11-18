@@ -3,6 +3,7 @@ import { HeartHandshake, AlertCircle } from 'lucide-react';
 import BirthForm from './BirthForm';
 import SmartReading from './SmartReading';
 import { Explainer } from './ui';
+import HelpButton from './HelpButton';
 
 const ACCENT = {
   amber: 'border-amber-300 bg-amber-50 text-amber-900',
@@ -69,6 +70,7 @@ export default function SynastryReport({ onOpenSettings }) {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      <div className="flex justify-end"><HelpButton topic="synastry" label="雙人合盤說明" /></div>
       <Explainer title="雙人合盤怎麼看？" accent="rose">
         <p>輸入兩人的生辰，同時用四個系統評估：<b>易經</b>看兩人世爻五行的生剋，<b>紫微</b>看命宮與夫妻宮的互照，<b>占星</b>看日月金火的跨盤相位（靈魂共鳴、情感溝通、吸引力），<b>人類圖</b>看通道如何互補。</p>
         <p>人類圖的「電磁」是各持通道一端、相遇產生強烈吸引；「同伴」是兩人都有完整通道、默契相近；「妥協」是一人完整、另一人只有一端，需要磨合。</p>

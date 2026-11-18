@@ -151,12 +151,12 @@ export const getWuxingWangShuai = (element, monthBranch) => {
   // 我生月令為休 (退休無力)
   if (generates[element] === monthWuxing) return { status: '休', desc: '生助月令，消耗體力', score: -1 };
   
-  // 剋月令為死 (耗盡力量)
+  // 剋月令為囚、月令剋我為死
   const restrains = { '木': '土', '土': '水', '水': '火', '火': '金', '金': '木' };
-  if (restrains[element] === monthWuxing) return { status: '死', desc: '受耗無力，施展困難', score: -3 };
+  // 「當令者旺，令生者相，生令者休，剋令者囚，令剋者死」
+  if (restrains[element] === monthWuxing) return { status: '囚', desc: '剋制月令，耗力受困', score: -2 };
   
-  // 月令剋我為囚 (受制無奈)
-  if (restrains[monthWuxing] === element) return { status: '囚', desc: '受月令壓制，窒礙難行', score: -2 };
+  if (restrains[monthWuxing] === element) return { status: '死', desc: '受月令剋制，力量最弱', score: -3 };
 
   return { status: '平', desc: '平和無礙', score: 0 };
 };
@@ -359,8 +359,9 @@ export const findFuShen = ({ linesData, palaceInfo, pillars }) => {
  * @returns {Object} 同 buildNajiaBoard
  */
 export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
-  const toTrigramKey = (n) => (n % 8 === 0 ? 0 : n % 8); // 8（坤）→ 0
-  const moving = num3 % 6 || 6;
+  // 取正餘數，負數輸入也不會排出不存在的卦（介面另會擋掉 1 以下的數字）
+  const toTrigramKey = (n) => ((n % 8) + 8) % 8; // 整除（坤 8）→ 0
+  const moving = ((num3 % 6) + 6) % 6 || 6;
   return buildNajiaBoard({ upId: toTrigramKey(num1), loId: toTrigramKey(num2), moving, pillars });
 };
 
