@@ -25,11 +25,12 @@ const Badge = ({ cls, children }) => (
  * @param {Array} lines buildNajiaBoard 的 linesData
  * @param {Object} pillars 起卦／出生四柱（year、month、day、hour、kongWang、yuePoBranch、riPoBranch）
  * @param {Array} fuShen buildNajiaBoard 的 fuShen（卦中不現之六親）
- * @param {string} yongShenRelation 用神六親（一事一占才有）；命卦不傳
+ * @param {string} yongShenRelation 用神六親（一事一占才有，用來標示伏神是否為用神）；命卦不傳
+ * @param {number} yongShenLineNum 實際取用為用神的爻位（用神為伏神時不傳）
  * @param {React.ReactNode} headerRight 標題列右側資訊
  * @param {string} timeLabel 四柱列標籤
  */
-export default function NajiaTable({ lines, pillars, fuShen = [], yongShenRelation = null, headerRight = null, toolbar = null, timeLabel = '起卦時間' }) {
+export default function NajiaTable({ lines, pillars, fuShen = [], yongShenRelation = null, yongShenLineNum = null, headerRight = null, toolbar = null, timeLabel = '起卦時間' }) {
   const fuByLine = {};
   fuShen.forEach((f) => { fuByLine[f.lineNum] = f; });
 
@@ -73,7 +74,8 @@ export default function NajiaTable({ lines, pillars, fuShen = [], yongShenRelati
           <tbody className="divide-y divide-stone-100">
             {[...lines].reverse().map((line) => {
               const fu = fuByLine[line.lineNum];
-              const isYongShen = !!yongShenRelation && line.relation === yongShenRelation;
+              // 只標實際取用的那一爻；用神多現時，其餘同六親的爻不標
+              const isYongShen = yongShenLineNum != null && line.lineNum === yongShenLineNum;
               const fuIsYongShen = !!fu && !!yongShenRelation && fu.relation === yongShenRelation;
               return (
                 <tr

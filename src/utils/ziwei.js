@@ -243,7 +243,8 @@ export function generateZiweiAiPrompt(astrolabeData, personName = '命主') {
   const sf = sanFangPalaces(raw.palaces, soulP);
   const decadals = analyzeDecadals(astrolabeData, nowYear);
   const curDec = decadals.find((d) => d.current);
-  const yearsInfo = [nowYear, nowYear + 1].map((y) => analyzeYear(astrolabeData, y));
+  // 與「一生詳述」一致：今年、明年、後年三個流年
+  const yearsInfo = [nowYear, nowYear + 1, nowYear + 2].map((y) => analyzeYear(astrolabeData, y));
   const allPalaces = raw.palaces.map((p) => `${p.name}（${p.earthlyBranch}，${p.heavenlyStem}）：${palaceStars(p)}`).join('\n');
   const sfText = sf ? `本宮${soulP.earthlyBranch}：${palaceStars(sf.self)}\n對宮${sf.opposite?.name}：${palaceStars(sf.opposite)}\n三合：${sf.trine.map((t) => `${t.name}：${palaceStars(t)}`).join('；')}` : '';
   const decText = curDec
@@ -283,6 +284,6 @@ ${yearText}
 二、【事業天賦與職場致勝道】：官祿宮與三方星曜如何引導其事業賽道？適合領薪體制、專技自由業還是經商創業？
 三、【一生財帛與聚財守庫】：財帛宮吉凶煞星與四化之影響，何種求財模式最聚氣？如何防範漏財破耗？
 四、【情感婚戀與相處智慧】：夫妻宮主星與福德宮互動，命主的理想伴侶原型、感情盲點與長久維持的經營指引。
-五、【運限提醒】：依目前大限四化與近兩年流年四化，說明事業、財帛、感情分別宜進宜守；請註明這是傾向而非定論。
+五、【運限提醒】：依目前大限四化與近三年流年四化，說明事業、財帛、感情分別宜進宜守；請註明這是傾向而非定論。
 六、【修為箴言】：給予命主一段務實的生活建議。`;
 }

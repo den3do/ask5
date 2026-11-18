@@ -1,6 +1,7 @@
 /**
- * 星曆底層：以 astronomy-engine（VSOP87 / 月球級數，精度約角秒級）計算
- * 黃道（回歸黃道、當日分點）上的日月行星經度、月交點、上升點與天頂。
+ * 星曆底層：以 astronomy-engine（VSOP87 / 月球級數）計算
+ * 黃道（回歸黃道、當日分點）上的日月行星經度（精度約角秒級）、月交點、上升點與天頂。
+ * 月交點為本檔以月球位置向量數值求得的真交點（非平均交點），數值誤差遠小於 0.01°。
  * 西洋占星與人類圖共用。
  */
 import * as Astronomy from 'astronomy-engine';
@@ -33,7 +34,7 @@ const toTime = (date) => Astronomy.MakeTime(date);
 
 /**
  * 回歸黃道經度（0~360）。
- * id: sun | moon | mercury … pluto | northNode(平均交點) | southNode | earth
+ * id: sun | moon | mercury … pluto | northNode（真交點，見 trueNodeLongitude） | southNode | earth
  */
 export function bodyLongitude(id, date) {
   const t = toTime(date);

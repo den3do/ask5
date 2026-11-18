@@ -82,7 +82,7 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   }));
   const pillars = { monthBranch: '午', dayBranch: '子', yuePoBranch: '子', riPoBranch: '午', kongWang: [], dayStem: '甲', monthStem: '甲' };
   const ev = evaluateDivination({ topic: '財運', pillars, linesData: lines, movingLine: null, palaceWuxing: '金', originalHex: {}, changedHex: {}, nuclearHex: {}, gender: '男', palaceId: 1 });
-  ok(ev.warnings?.some((w) => w.includes('伏神')), '用神（妻財）不現 → 取伏神並說明');
+  ok(ev.notes?.some((w) => w.includes('伏神')) && !ev.warnings.some((w) => w.includes('取伏神')), '用神（妻財）不現 → 取伏神並寫在取用說明（不算不利）');
 }
 
 // 7b. 六爻用神加成（《黃金策》《增刪卜易》）：乾宮，財運用神為第 2 爻寅木，世在六爻戌土
@@ -115,6 +115,24 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   const jiStrong = run(P('酉', '午', '卯', '子'), mk([], { line: 5, changed: { branch: '未', wuxing: '土' } }));
   const noMove = run(P('酉', '午', '卯', '子'), mk([]));
   ok(jiStrong.warnings.some((w) => w.includes('剋力更盛')) && jiStrong.score < noMove.score, `忌神旺動化回頭生 → 剋力更盛（${jiStrong.score} < ${noMove.score}）`);
+}
+
+// 7b-2. 沖空：旬空的用神被日沖為出空而實，不另扣日破；未旬空才算日破
+{
+  const BR = ['子', '寅', '辰', '午', '申', '戌'];
+  const WX = { 子: '水', 寅: '木', 辰: '土', 午: '火', 申: '金', 戌: '土' };
+  const REL = { 子: '子孫', 寅: '妻財', 辰: '父母', 午: '官鬼', 申: '兄弟', 戌: '父母' };
+  const mk = (kong) => BR.map((b, i) => ({ lineNum: i + 1, branch: b, wuxing: WX[b], relation: REL[b], beast: '青龍', isShi: i === 5, isYing: i === 2, isMoving: false, isKongWang: kong.includes(b), isYuePo: false, bit: 1, changed: null }));
+  const run = (kong) => evaluateDivination({ topic: '財運', pillars: { monthBranch: '卯', dayBranch: '申', yuePoBranch: '酉', riPoBranch: '寅', kongWang: kong, dayStem: '甲' }, linesData: mk(kong), movingLine: null, palaceWuxing: '金', originalHex: {}, changedHex: {}, nuclearHex: {}, gender: '男', palaceId: 1 });
+  const chongKong = run(['寅', '卯']);
+  ok(!chongKong.warnings.some((w) => w.includes('日破')) && chongKong.notes.some((n) => n.includes('沖空')), '旬空用神逢日沖 → 沖空，不另扣日破');
+  ok(run([]).warnings.some((w) => w.includes('日破')), '未旬空用神逢日沖 → 日破');
+}
+
+// 7b-3. 八字調候：已達 30% 不提前時，文字不得寫「已列為優先喜用」
+{
+  const w = analyzeBazi({ year: '丙午', month: '丙子', day: '丙午', hour: '丙午' }, { gender: '男' });
+  ok(w.yongshen.tiaohouElement === '火' && w.yongshen.favorable[0] !== '火' && !w.yongshen.tiaohou.includes('已列為優先喜用'), `調候火已足 → 不提前且文字一致（${w.yongshen.tiaohou}）`);
 }
 
 // 7c. 旺相休囚死：剋令者囚、令剋者死

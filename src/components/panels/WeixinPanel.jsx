@@ -63,6 +63,14 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
   const compL = wx.lowerId;
   const [upId, setUpId] = useState(compU);
   const [loId, setLoId] = useState(compL);
+  // 重新排盤（profile 換新）時丟掉舊的手動指定，回到新命盤的自動排卦；
+  // 在 render 中比對前一次的 profile 立即重設，避免先閃一次舊的上下卦
+  const [seenProfile, setSeenProfile] = useState(profile);
+  if (seenProfile !== profile) {
+    setSeenProfile(profile);
+    setUpId(compU);
+    setLoId(compL);
+  }
   const hex = getHexData(upId, loId);
   const computedName = getHexData(compU, compL).name;
   const up = TRIGRAMS[upId];

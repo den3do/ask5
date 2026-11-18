@@ -100,6 +100,8 @@ export function resolveCity(b) {
   return null;
 }
 
+const LUNAR_MIN_UTC = Date.UTC(1900, 0, 31); // lunar.js 的 LUNAR_BASE_UTC：農曆 1900 年正月初一
+
 export function validateBirth(b) {
   if (b.cityIdx === 'custom' && !resolveCity(b)) return '自訂出生地請填入有效的緯度（-90~90）與經度（-180~180）';
   const r = resolveBirth(b);
@@ -110,6 +112,11 @@ export function validateBirth(b) {
   if (r.day < 1 || r.day > dim) return `${r.year} 年 ${r.month} 月只有 ${dim} 天`;
   if (r.hour < 0 || r.hour > 23 || r.minute < 0 || r.minute > 59) return '出生時間需為 00:00–23:59';
   if (!r.moment) return '無法解析出生時刻，請檢查日期、時間與時區';
+  // 內建萬年曆（lunar.js）從 1900-01-31（農曆庚子年正月初一）起算；更早的日期無法換算農曆。
+  // 以中式「有效日期」判斷（夜子時算次日時，1900-01-30 23:00 後已屬 1/31，可以排）。
+  const c = r.moment.chinese;
+  const eff = c && [c.year, c.month, c.day].every(Number.isFinite) ? Date.UTC(c.year, c.month - 1, c.day) : Date.UTC(r.year, r.month - 1, r.day);
+  if (eff < LUNAR_MIN_UTC) return '出生日期需在 1900 年 1 月 31 日（農曆庚子年正月初一）之後：更早的日期超出內建萬年曆範圍，無法換算農曆';
   return null;
 }
 
@@ -196,8 +203,21 @@ function buildElementTally(p) {
   const max = Math.max(...Object.values(tally));
   const dominant = Object.keys(tally).filter((k) => tally[k] === max && max > 0);
   const missing = Object.keys(tally).filter((k) => tally[k] === 0);
-  const caveat = '每個體系對每個五行至多算一票（共 3 個體系），僅為跨體系指向，不是八字五行旺衰；占星四元素對應五行（風→木）為類比，非傳統定義。';
-  return { tally, dominant, missing, sources, bySystem: Object.fromEntries(Object.entries(bySystem).map(([k, v]) => [k, [...v]])), caveat, voters: p.ziwei ? 3 : 2 };
+  const voterNames = Object.keys(bySystem).filter((k) => k !== '紫微' || p.ziwei);
+  const voters = voterNames.length;
+  const caveat = `每個體系對每個五行至多算一票（本次共 ${voters} 個體系：${voterNames.join('、')}${p.ziwei ? '' : '；出生時間不詳，紫微未排'}），僅為跨體系指向，不是八字五行旺衰；占星四元素對應五行（風→木）為類比，非傳統定義。`;
+  return { tally, dominant, missing, sources, bySystem: Object.fromEntries(Object.entries(bySystem).map(([k, v]) => [k, [...v]])), caveat, voters, voterNames };
+}
+
+/** 由 buildElementTally 的 bySystem 重算五行指向，可排除指定體系（融合三家提示詞不含易經） */
+export function elementTallyOf(el, exclude = []) {
+  const names = (el.voterNames || Object.keys(el.bySystem)).filter((k) => !exclude.includes(k));
+  const tally = { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 };
+  for (const k of names) for (const wx of el.bySystem[k] || []) tally[wx] += 1;
+  const max = Math.max(...Object.values(tally));
+  const dominant = Object.keys(tally).filter((k) => tally[k] === max && max > 0);
+  const missing = Object.keys(tally).filter((k) => tally[k] === 0);
+  return { tally, dominant, missing, voters: names.length, voterNames: names };
 }
 
 function palaceLine(palace) {
@@ -313,7 +333,7 @@ ${zText}
 - 通道：${hd.definedChannels.map((c) => `${c.gates.join('-')}${c.shortName}`).join('、') || '無完整通道'}
 - 意識太陽 Gate ${hd.conscious.sun.gate}.${hd.conscious.sun.line}、潛意識太陽 Gate ${hd.unconscious.sun.gate}.${hd.unconscious.sun.line}
 
-【跨體系五行指向（每體系每五行至多一票，共 3 體系；非八字旺衰，占星元素對應為類比）】
+【跨體系五行指向（每體系每五行至多一票，共 ${el.voters} 體系：${el.voterNames.join('、')}；非八字旺衰，占星元素對應為類比）】
 - 分布：${Object.entries(el.tally).map(([k, v]) => `${k}${v}`).join(' ')}；偏重：${el.dominant.join('、') || '均衡'}；缺少：${el.missing.join('、') || '無'}
 
 【請依下列結構撰寫（總字數建議六千至一萬字，語氣溫暖專業、少用空泛套話）】
@@ -418,8 +438,11 @@ export function compareZiwei(zA, zB, nA = 'A', nB = 'B') {
 }
 
 // ───────────────────── 雙人完整合盤 ─────────────────────
-export function tierOf(score) {
-  if (score >= 85) return { tier: '天作之合', desc: '四個體系大多指向共鳴，彼此是難得的靈魂夥伴。' };
+const CN_NUM = ['零', '一', '兩', '三', '四', '五', '六'];
+
+/** @param {number} n 參與比較的體系數（八字、易經、紫微、占星、人類圖＝5；紫微缺席時 4） */
+export function tierOf(score, n = 5) {
+  if (score >= 85) return { tier: '天作之合', desc: `${CN_NUM[n] || n}個體系大多指向共鳴，彼此是難得的靈魂夥伴。` };
   if (score >= 75) return { tier: '默契深厚', desc: '基礎契合度高，只要用心經營便能長久。' };
   if (score >= 65) return { tier: '互補成長', desc: '差異與吸引並存，彼此是對方的成長鏡子。' };
   if (score >= 55) return { tier: '需要磨合', desc: '摩擦點不少，但溝通得當仍可轉化為助力。' };
@@ -430,6 +453,33 @@ export function tierOf(score) {
 export function levelOf(score) {
   const n = score >= 85 ? 5 : score >= 75 ? 4 : score >= 65 ? 3 : score >= 55 ? 2 : 1;
   return { level: n, levelLabel: ['', '張力較大', '需要磨合', '互補成長', '默契良好', '高度共鳴'][n] };
+}
+
+/**
+ * 「完全沒有交集」的中性等級：占星沒有任何跨盤相位、人類圖沒有電磁／同伴／妥協通道時，
+ * 分數只是停在起始值附近，並不代表衝突，所以不套「張力較大」，改標中性。
+ */
+export const NEUTRAL_LEVEL = { level: 0, levelLabel: '交集少', neutral: true, neutralNote: '交集少，無明顯共鳴也無明顯張力' };
+
+/** 占星三個主題各自的等級；該主題沒有任何跨盤相位時為中性 */
+export function astroThemeLevels(astro) {
+  return Object.entries(astro.themeScore).map(([theme, v]) => ({
+    theme, score: v,
+    ...(astro.aspects.some((x) => x.theme === theme) ? { ...levelOf(v), neutral: false } : NEUTRAL_LEVEL),
+  }));
+}
+
+/** 人類圖時間不詳的提醒：中午盤＋月亮閘門不定，跨盤通道（尤其電磁）可能改變 */
+function hdTimeCaveat(pA, pB) {
+  const parts = [pA, pB].filter((p) => p.hd.timeUncertainty).map((p) => {
+    const u = p.hd.timeUncertainty;
+    const extra = [];
+    if (!u.typeStable) extra.push(`類型可能是${u.alt.join('或')}`);
+    if (!u.channelsStable) extra.push('部分通道不確定');
+    if (u.gatesUncertain.length) extra.push(`閘門 ${u.gatesUncertain.join('、')} 可能有或沒有`);
+    return `${p.name}出生時間不詳，人類圖以當日中午計算${extra.length ? `（${extra.join('；')}）` : ''}`;
+  });
+  return parts.length ? `${parts.join('；')}。兩人之間的通道比對（尤其電磁通道）可能因此改變，人類圖這一項僅供參考。` : null;
 }
 
 export function compareProfiles(pA, pB) {
@@ -446,15 +496,27 @@ export function compareProfiles(pA, pB) {
   // 各系統內部以自訂規則計分，只能當相對參考：對外只呈現五級定性，不顯示精確分數（避免假精確）
   // 八字合婚（日干五合、日支合沖刑害、生肖、用神互補）是傳統合婚的核心，權重上與其他體系並列
   const bazi = compareBazi(pA.destiny.pillarsRaw, pB.destiny.pillarsRaw, pA.bazi, pB.bazi, pA.name, pB.name);
+  // 「完全沒有交集」：占星無任何跨盤相位；人類圖沒有電磁、同伴、妥協通道（只剩一方獨有的支配通道或全無）
+  const astroNoContact = astro.aspects.length === 0;
+  const hdNoContact = !hd.electromagnetic.length && !hd.companion.length && !hd.compromise.length;
+  const hdCaveat = hdTimeCaveat(pA, pB);
+  const ichingScore = clamp(iching.score, 30, 98);
   const dims = [
     { key: 'bazi', label: '八字合婚', score: bazi.score },
-    { key: 'iching', label: '易經世應', score: clamp(iching.score, 30, 98) },
+    { key: 'iching', label: '易經世爻・卦宮', score: ichingScore },
     ...(ziwei.skipped ? [] : [{ key: 'ziwei', label: '紫微命夫妻', score: ziwei.score }]),
-    { key: 'astro', label: '占星合盤', score: astro.score },
-    { key: 'hd', label: '人類圖通道', score: hd.score },
-  ].map((d) => ({ ...d, ...levelOf(d.score) }));
-  const overall = clamp(dims.reduce((s, d) => s + d.score, 0) / dims.length, 30, 98);
-  return { overall, ...tierOf(overall), ...levelOf(overall), dims, bazi, iching, ziwei, astro, hd };
+    { key: 'astro', label: '占星合盤', score: astro.score, noContact: astroNoContact },
+    { key: 'hd', label: '人類圖通道', score: hd.score, noContact: hdNoContact, uncertain: !!hdCaveat },
+  ].map((d) => ({ ...d, ...(d.noContact ? NEUTRAL_LEVEL : { ...levelOf(d.score), neutral: false }) }));
+  // 綜合分數：中性（無交集）的面向沒有表態，不列入平均（同紫微缺席的處理），避免把「沒有連結」算成張力
+  const scored = dims.filter((d) => !d.neutral);
+  const overall = clamp(scored.reduce((s, d) => s + d.score, 0) / scored.length, 30, 98);
+  // 易經卡等第改用與各面向相同的五級文字與門檻（原 iching.tier 的「天作之合」門檻是 90，與綜合徽章 85 不同）
+  const ichingCmp = { ...iching, tier: levelOf(ichingScore).levelLabel, rawTier: iching.tier };
+  return {
+    overall, ...tierOf(overall, dims.length), ...levelOf(overall), dims, systemCount: dims.length,
+    bazi, iching: ichingCmp, ziwei, astro, astroThemes: astroThemeLevels(astro), hd, hdCaveat,
+  };
 }
 
 export function generatePairPrompt(pA, pB, cmp) {
@@ -463,26 +525,31 @@ export function generatePairPrompt(pA, pB, cmp) {
   const zNotes = cmp.ziwei.notes.map((n) => n.text).join(' ');
   const brief = (p) => `${p.name}（${p.gender}）：${p.destiny.hexagrams.original.name}卦／${p.ziwei ? `命宮${soulStarNames(p.ziwei).join('、') || '無主星'}` : '紫微（時間不詳，未排）'}／${p.astro.timeUnknown ? `${p.astro.sun.sign.name}太陽（無上升）` : `${p.astro.sun.sign.name}太陽・${p.astro.moon.sign.name}月亮・${p.astro.asc.sign.name}上升`}／${p.hd.typeInfo.type} ${p.hd.profileInfo.profile}${p.hd.timeUncertainty && !p.hd.timeUncertainty.typeStable ? '（類型待確認）' : ''}`;
 
-  return `您好，請同時以易經、紫微斗數、西洋占星與人類圖大師的視角，為下列兩人撰寫「太極同心．雙人全維合盤契合報告」。
+  const n = cmp.dims.length;
+  const nText = CN_NUM[n] || n;
+  const themes = (cmp.astroThemes || astroThemeLevels(cmp.astro)).map((t) => `${t.theme}${t.levelLabel}`).join('、');
+  const dimText = (d) => `${d.label}：${d.neutral ? `${d.levelLabel}（${d.neutralNote}）` : d.levelLabel}${d.uncertain ? '（出生時間不詳，僅供參考）' : ''}`;
+
+  return `您好，請同時以八字合婚、易經、紫微斗數、西洋占星與人類圖大師的視角，為下列兩人撰寫「太極同心．雙人五維合盤契合報告」。
 
 【雙方概況】
 - A｜${brief(pA)}
 - B｜${brief(pB)}
 
 【系統計算結果】
-- 綜合傾向：${cmp.tier}（${cmp.levelLabel}）；各維度：${cmp.dims.map((d) => `${d.label}：${d.levelLabel}`).join('、')}（規則式相對評估，非精確分數，請勿當作吉凶定論）
-- 八字合婚：${cmp.bazi.notes.map((n) => n.text).join(' ') || '日柱無明顯合沖'}
-- 易經：${cmp.iching.dynamicSummary}｜亮點：${cmp.iching.synergyPoints?.join('；') || '互補'}｜摩擦：${cmp.iching.frictionPoints?.join('；') || '需磨合'}
+- 綜合傾向：${cmp.tier}（${cmp.levelLabel}）；共 ${n} 個體系，各維度：${cmp.dims.map(dimText).join('、')}（規則式相對評估，非精確分數，請勿當作吉凶定論；「交集少」的維度不列入綜合平均）${cmp.ziwei.skipped ? '；紫微因出生時間不詳未比較' : ''}
+- 八字合婚：${cmp.bazi.notes.map((x) => x.text).join(' ') || '日柱無明顯合沖'}
+- 易經（世爻五行、卦宮五行）：${cmp.iching.dynamicSummary}｜亮點：${cmp.iching.synergyPoints?.join('；') || '互補'}｜摩擦：${cmp.iching.frictionPoints?.join('；') || '需磨合'}
 - 紫微：${zNotes || '無特別呼應'}
-- 占星跨盤相位：${astroLine}；主題傾向 ${Object.entries(cmp.astro.themeScore).map(([k, v]) => `${k}${levelOf(v).levelLabel}`).join('、')}
+- 占星跨盤相位：${astroLine}；主題傾向 ${themes}
 - 人類圖電磁通道（強烈吸引）：${hdLine(cmp.hd.electromagnetic)}
 - 人類圖同伴通道（默契共鳴）：${hdLine(cmp.hd.companion)}
 - 人類圖妥協通道（需要磨合）：${hdLine(cmp.hd.compromise)}
-- 人類圖支配通道（一方主導）：${hdLine(cmp.hd.dominance)}
+- 人類圖支配通道（一方主導）：${hdLine(cmp.hd.dominance)}${cmp.hdCaveat ? `\n- ⚠ 人類圖可信度：${cmp.hdCaveat}請勿把人類圖的結論說得太肯定。` : ''}
 
 【請依下列結構撰寫】
 1. 兩人關係的核心主題：吸引力從何而來、各自在關係中扮演的角色。
-2. 四個體系一致與矛盾之處，並說明該相信哪一個層面（相處日常／情感需求／長期目標）。
+2. ${nText}個體系一致與矛盾之處，並說明該相信哪一個層面（相處日常／情感需求／長期目標）。
 3. 溝通與衝突模式：最容易引爆的三個場景，以及雙方各自可以做的具體調整。
 4. 情感與親密、金錢與生活節奏的相處建議。
 5. 給 A 的錦囊、給 B 的錦囊（各三到五條）。
@@ -530,8 +597,20 @@ export function generateFusionPrompt(p) {
   let body = data.replace(/^[^\n]*\n\n/, '');
   body = body.replace(/【一、易經命卦】[\s\S]*?(?=【二、紫微斗數】)/, '')
     .replace('【二、紫微斗數】', '【一、紫微斗數】').replace('【三、西洋占星】', '【二、西洋占星】').replace('【四、人類圖】', '【三、人類圖】');
+  // 五行指向：融合只談三家，易經的世爻／卦宮票不計入（人類圖本來就沒有五行）
+  const el = elementTallyOf(p.elements, ['易經']);
+  const wxSection = el.voters
+    ? `【跨體系五行指向（只計${el.voterNames.join('、')}，每體系每五行至多一票；非八字旺衰，占星元素對應為類比）】
+- 分布：${Object.entries(el.tally).map(([k, v]) => `${k}${v}`).join(' ')}；偏重：${el.dominant.join('、') || '均衡'}；缺少：${el.missing.join('、') || '無'}
+`
+    : '';
+  body = body.replace(/【跨體系五行指向[\s\S]*?(?=\n\n|$)\n?/, wxSection);
   const rule = fusionSummaryAsText(buildFusionSummary(p));
-  return `請為【${p.name}】撰寫「紫微斗數 × 人類圖 × 西洋占星」三家融合總論。
+  const fam = p.ziwei ? '三家' : '兩家';
+  const head = p.ziwei
+    ? `請為【${p.name}】撰寫「紫微斗數 × 人類圖 × 西洋占星」三家融合總論。`
+    : `請為【${p.name}】撰寫「紫微斗數 × 人類圖 × 西洋占星」融合總論（出生時間不詳，紫微未排盤，實際只有占星與人類圖兩家可用；不得杜撰紫微內容）。`;
+  return `${head}
 
 ${body}
 【系統已整理的初步共識（供參考，可修正）】
@@ -539,8 +618,8 @@ ${rule}
 
 【請依下列結構撰寫（總字數建議三千至五千字，用流暢白話重新組織，不要逐系統條列）】
 一、總論（約 500 字）：用一段完整的文字說出此人的本命底色、核心動力與整體人生主題。
-二、三家共識：列出三家都指向的 3–4 個特質，每項註明紫微、占星、人類圖各自的證據。
-三、矛盾與整合：三家說法不同之處，以及如何在生活中整合。
+二、${fam}共識：列出${fam}都指向的 3–4 個特質，每項註明${p.ziwei ? '紫微、占星、人類圖' : '占星、人類圖'}各自的證據。
+三、矛盾與整合：${fam}說法不同之處，以及如何在生活中整合。
 四、天賦與事業財運、情感關係、身心能量（各一段，註明主要依據）。
 五、最大的天賦與最需修煉的課題各三點。
 六、未來十二個月的行動清單（五到七條）與一句座右銘。

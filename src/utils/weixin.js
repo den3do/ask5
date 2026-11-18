@@ -60,7 +60,7 @@ import { calculatePillars } from './lunar.js';
 export function buildWeixinChart(birth, upId, loId, movingLine) {
   const c = birth.moment?.chinese || chineseClock(birth.year, birth.month, birth.day, birth.hour);
   const noTime = birth.timeKnown === false || birth.timeKnown === 'false';
-  const pillars = calculatePillars(c.year, c.month, c.day, noTime ? null : c.hourIdx, { utc: birth.moment?.utc });
+  const pillars = calculatePillars(c.year, c.month, c.day, noTime ? null : c.hourIdx, { utc: birth.moment?.utc, hourStemDayShift: c.hourStemDayShift });
   const board = buildNajiaBoard({ upId, loId, moving: movingLine || null, pillars });
   return { lines: board.linesData, pillars, palace: board.palaceInfo, fuShen: board.fuShen, board };
 }

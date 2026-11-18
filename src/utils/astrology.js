@@ -1,7 +1,9 @@
 /**
  * 西洋占星天文計算引擎 - 純前端高精度版本
  * 計算行星黃道位置、十二星座、宮位（整宮制）與主要相位
- * 精度：約 ±0.1° 以內（適合日常命理解析使用）
+ * 精度：行星與日月位置由 ephemeris.js（astronomy-engine）計算，達角秒級；
+ *       北交點為數值求得的真交點（非平均交點），數值誤差遠小於 0.01°。
+ *       實際結果的誤差主要來自出生時間、地點與時區的輸入，而非天文計算本身。
  */
 
 import { bodyLongitude, ascendantAndMc, localToUtcDate, norm360, norm180 } from './ephemeris.js';
@@ -40,10 +42,10 @@ export const PLANETS = [
   { id: 'mc', name: '天頂', symbol: 'MC', chName: '天頂', glyph: '⬆' },
 ];
 
-// 相位定義
+// 相位定義：合、六分、四分、三分、對分為托勒密五大主要相位（major）；150° 為次要相位
 export const ASPECTS = [
   { name: '合相', symbol: '☌', angle: 0, orb: 8, nature: 'major', color: '#f59e0b' },
-  { name: '六分相', symbol: '⚹', angle: 60, orb: 6, nature: 'minor', color: '#3b82f6' },
+  { name: '六分相', symbol: '⚹', angle: 60, orb: 6, nature: 'major', color: '#3b82f6' },
   { name: '四分相', symbol: '□', angle: 90, orb: 8, nature: 'major', color: '#ef4444' },
   { name: '三分相', symbol: '△', angle: 120, orb: 8, nature: 'major', color: '#10b981' },
   { name: '對分相', symbol: '☍', angle: 180, orb: 8, nature: 'major', color: '#8b5cf6' },
@@ -163,6 +165,11 @@ export function aspectBetween(lon1, lon2, orbScale = 1) {
   return null;
 }
 
+/** 只取主要相位（托勒密五大相位），依容許度由小到大（最緊密者在前） */
+export function majorAspectsByOrb(aspects = []) {
+  return aspects.filter((a) => a.nature === 'major').sort((x, y) => x.orb - y.orb);
+}
+
 /**
  * 完整計算西洋星盤
  * @param {Object} params
@@ -188,7 +195,8 @@ export function calculateAstroChart({ year, month, day, hour = 12, minute = 0, l
   const nnLon = bodyLongitude('northNode', date);
   positions.northNode = { id: 'northNode', lon: nnLon, sign: getLongitudeSign(nnLon) };
 
-  // 出生時間不詳：上升與宮位無法確定，改採「太陽盤」（以太陽星座為第一宮）並明確標示
+  // 出生時間不詳：上升與宮位無法確定。內部仍以太陽位置當上升占位（太陽盤，供圓盤定向），
+  // 但 timeUnknown 為 true 時，畫面不顯示上升、天頂與宮位，相位與合盤也不納入上升／天頂。
   let ascLon; let mcLon;
   if (timeKnown) {
     ({ asc: ascLon, mc: mcLon } = ascendantAndMc(date, lat, lon));
@@ -240,7 +248,7 @@ export function calculateAstroChart({ year, month, day, hour = 12, minute = 0, l
     const m0 = getLongitudeSign(bodyLongitude('moon', d0));
     const m1 = getLongitudeSign(bodyLongitude('moon', d1));
     moonSigns = [m0, m1];
-    warnings.push('出生時間不詳：上升、天頂與宮位無法確定，本盤改採「太陽盤」（以太陽星座為第一宮），宮位與上升僅供參考，已不納入上升相位。');
+    warnings.push('出生時間不詳：上升、天頂與宮位無法確定，本盤不顯示上升、天頂與宮位，相位也不納入上升與天頂；行星以當地中午估算。');
     warnings.push(m0.name === m1.name
       ? `月亮當天停留在${m0.name}，月亮星座可確定，但度數（及月亮相位）不準。`
       : `月亮當天由${m0.name}移入${m1.name}，月亮星座無法確定（本盤以中午估算：${positions.moon.sign.name}）。`);
@@ -292,7 +300,12 @@ export function calculateSynastry(chartA, chartB) {
   const themes = { 靈魂共鳴: 0, 情感溝通: 0, 吸引力: 0 };
   const themeMax = { 靈魂共鳴: 0, 情感溝通: 0, 吸引力: 0 };
 
+  // 出生時間不詳的盤，上升只是太陽位置的占位值：牽涉該盤上升的組合整組略過（不計分、也不計入滿分）
+  const ascUnknownA = !!chartA.timeUnknown;
+  const ascUnknownB = !!chartB.timeUnknown;
+
   for (const [a, b, w, theme] of SYN_PAIRS) {
+    if ((a === 'asc' && ascUnknownA) || (b === 'asc' && ascUnknownB)) continue;
     maxRaw += w;
     themeMax[theme] += w;
     const asp = aspectBetween(chartA.positions[a].lon, chartB.positions[b].lon, 0.85);
@@ -333,9 +346,7 @@ export function generateAstrologyAiPrompt(chart, personName = '命主') {
     .map(([id, name]) => `${name}：${positions[id]?.sign.name}（${positions[id]?.sign.degreeStr}）${known && positions[id]?.house ? `第${positions[id].house}宮` : ''}`)
     .join('、');
 
-  const aspectDesc = aspects
-    .filter((a) => a.nature === 'major')
-    .sort((x, y) => x.orb - y.orb)
+  const aspectDesc = majorAspectsByOrb(aspects)
     .slice(0, 12)
     .map((a) => {
       const p1name = keyPlanetNames[a.planet1] || a.planet1;
@@ -357,7 +368,7 @@ ${aspectDesc || '相位資料計算中'}
 
 一、【靈魂本質與人生使命】：
    - 太陽星座：命主的意識身分認同、核心使命與生命主題。
-   - 上升星座（ASC）：命主向世界展現的外在人格面具、第一印象與身體氣質。
+   - ${known ? '上升星座（ASC）：命主向世界展現的外在人格面具、第一印象與身體氣質。' : '上升星座（ASC）：出生時間不詳，上升無法確定，請略過、不要推測。'}
 
 二、【情感與潛意識深層結構】：
    - 月亮星座：情感需求、安全感模式、與家庭/母親的深層連結。
@@ -399,7 +410,7 @@ function findTransitAges(id, target, birthDate, fromAge, toAge, stepDays = 15) {
   return hits;
 }
 
-const fmtAges = (a) => (a.length ? (a.length === 1 ? `約 ${a[0].toFixed(1)} 歲` : `約 ${a.map((x) => x.toFixed(1)).join('、')} 歲（行星逆行，多次精確）`) : '範圍內無精確相位');
+const fmtAges = (a) => (a.length ? (a.length === 1 ? `約 ${a[0].toFixed(1)} 歲` : `約 ${a.map((x) => x.toFixed(1)).join('、')} 歲（行星逆行，多次精確）`) : '此區間未找到精確相位');
 
 /**
  * 以本命盤實算的行運時間。回傳 [{key, title, ages:[...], text}]
@@ -416,7 +427,7 @@ export function calculateLifeTransits(chart) {
   list.push({ key: 'satReturn2', title: '第二次土星回歸', ages: sat2, text: `${fmtAges(sat2)}。` });
   const jup = [];
   for (const base of [12, 24, 36, 48, 60]) jup.push(...findTransitAges('jupiter', pos.jupiter.lon, birth, base - 1, base + 1));
-  list.push({ key: 'jupReturn', title: '木星回歸（每 12 年）', ages: jup, text: `行運木星回到本命木星（${pos.jupiter.sign.name}）：${jup.map((x) => x.toFixed(1)).join('、') || '—'} 歲。` });
+  list.push({ key: 'jupReturn', title: '木星回歸（每 12 年）', ages: jup, text: `行運木星回到本命木星（${pos.jupiter.sign.name}）：${jup.length ? `${jup.map((x) => x.toFixed(1)).join('、')} 歲` : '此區間未找到精確回歸'}。` });
   const ura = findTransitAges('uranus', norm360(pos.uranus.lon + 180), birth, 36, 48);
   list.push({ key: 'uraOpp', title: '天王星對分（中年轉化）', ages: ura, text: `行運天王星對本命天王星（${pos.uranus.sign.name}）：${fmtAges(ura)}。` });
   const node = findTransitAges('northNode', pos.northNode.lon, birth, 17.5, 20);

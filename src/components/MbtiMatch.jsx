@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Copy, Download, FolderOpen, ArrowLeftRight } from 'lucide-react';
 import { TYPES, DIMENSIONS } from '../data/mbti';
-import { parseRecord } from '../utils/mbti';
+import { typeFromRecord } from '../utils/mbti';
 import { buildMatchGuide, buildMatchText } from '../utils/mbtiMatch';
 import { Explainer } from './ui';
 
@@ -62,15 +62,22 @@ export default function MbtiMatch({ myType = '', myName = '' }) {
   const [bMsg, setBMsg] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // 做完測驗或載入存檔後(父層傳入的類型改變),自動帶入「你」;切換分頁時元件不會重掛,其餘選擇保留
+  useEffect(() => {
+    if (myType && TYPES[myType]) setAType(myType);
+    if (myName) setAName(myName);
+  }, [myType, myName]);
+
   const loader = (setType, setName, setMsg) => async (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    const rec = parseRecord(await f.text());
-    if (!rec) { setMsg('不是有效的 MBTI 存檔'); return; }
+    // 與結果頁相同:依存檔內的作答重新計分並驗證,不採用檔案裡記錄的 type
+    const { type, name, error } = typeFromRecord(await f.text());
+    if (!type) { setMsg(error); return; }
     setMsg('');
-    setType(rec.type);
-    if (rec.name && rec.name !== '未命名') setName(rec.name);
+    setType(type);
+    if (name && name !== '未命名') setName(name);
   };
 
   const guide = useMemo(
@@ -134,7 +141,7 @@ export default function MbtiMatch({ myType = '', myName = '' }) {
           </div>
 
           <Card title="🧠 認知功能觀察">
-            {guide.insights.map((i) => <p key={i.kind}><b>{i.kind}:</b>{i.text}</p>)}
+            {guide.insights.map((i) => <p key={i.kind + i.text}><b>{i.kind}:</b>{i.text}</p>)}
           </Card>
 
           <div className="grid sm:grid-cols-2 gap-3">

@@ -21,6 +21,9 @@ export function interleave(list) {
 /**
  * 計分。answers: { [questionId]: 1..5 }（5=非常同意）
  * 每維度回傳偏向 a/b 極的百分比（0~100），score 為 -1~1，正值偏 a 極。
+ * 左極（E/S/T/J）題與右極（I/N/F/P）題「各自平均」後再取兩者平均，
+ * 因此兩極權重相同、不受題數不等（12 題版 2:1、60 題版 8:7）影響；
+ * 全部同一種答法（全同意／全不同意／全中立）必定落在 50%。
  * 持平時依序取 I / N / F / P（標示 tie）。
  */
 export function scoreMbti(answers, mode) {
@@ -28,16 +31,16 @@ export function scoreMbti(answers, mode) {
   const dims = {};
   for (const key of Object.keys(DIMENSIONS)) {
     const { a, b } = DIMENSIONS[key];
-    let sum = 0;
-    let max = 0;
+    const side = { a: { sum: 0, n: 0 }, b: { sum: 0, n: 0 } };
     for (const q of qs.filter((x) => x.d === key)) {
       const v = answers[q.id];
       if (!v) continue;
       const w = (v - 3) / 2; // -1 ~ 1
-      sum += q.p === a ? w : -w;
-      max += 1;
+      if (q.p === a) { side.a.sum += w; side.a.n += 1; } else { side.b.sum -= w; side.b.n += 1; }
     }
-    const score = max ? sum / max : 0;
+    const means = [side.a, side.b].filter((s) => s.n).map((s) => s.sum / s.n);
+    const score = means.length ? means.reduce((x, y) => x + y, 0) / means.length : 0;
+    const max = side.a.n + side.b.n;
     const aPct = Math.round(50 + score * 50);
     const tie = aPct === 50;
     dims[key] = {
@@ -62,11 +65,29 @@ export function strengthLabel(s) {
 }
 
 // ---------------- 存檔（JSON 檔案，存到使用者本機；不使用瀏覽器儲存） ----------------
+
+/**
+ * 題庫指紋：題數 + 題目（id、維度、極性、文字）的短雜湊（FNV-1a 32 位元）。
+ * 作答以題目 id（陣列索引）存檔，若日後題目順序或內容變動，舊存檔會被誤讀；
+ * 新存檔會記下指紋，載入時不符就拒絕。
+ */
+export function questionSetId(mode) {
+  const qs = getQuestions(mode);
+  const src = qs.map((q) => `${q.id}|${q.d}|${q.p}|${q.t}`).join('\n');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < src.length; i++) {
+    h ^= src.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${mode}-${qs.length}-${h.toString(16).padStart(8, '0')}`;
+}
+
 export function buildRecord({ name, mode, answers }) {
   const res = scoreMbti(answers, mode);
   return {
     app: 'ask5-mbti',
-    version: 1,
+    version: 2,
+    qset: questionSetId(mode),
     name: (name || '').trim() || '未命名',
     mode,
     date: new Date().toISOString(),
@@ -76,17 +97,54 @@ export function buildRecord({ name, mode, answers }) {
   };
 }
 
-/** 驗證並還原從本機載入的 JSON；失敗回傳 null */
-export function parseRecord(text) {
+export const RECORD_ERRORS = {
+  invalid: '這不是有效的 MBTI 存檔(.json),或檔案內容不完整。',
+  qset: '這份存檔是用舊版或不同版本的題目作答的,題目已更動,無法正確還原結果;請重新測驗一次。',
+};
+
+/**
+ * 驗證並還原從本機載入的 JSON。回傳 { rec } 或 { error }。
+ * 有題庫指紋（qset）且與目前題庫不符 → 拒絕；沒有指紋（舊版存檔）→ 照舊接受。
+ * 類型與百分比一律依作答重新計算，不採用檔案裡記錄的值。
+ */
+export function checkRecord(text) {
   try {
     const r = JSON.parse(text);
-    if (r?.app !== 'ask5-mbti' || ![12, 60].includes(r.mode) || typeof r.answers !== 'object' || !r.answers) return null;
+    if (r?.app !== 'ask5-mbti' || ![12, 60].includes(r.mode) || typeof r.answers !== 'object' || !r.answers) return { error: RECORD_ERRORS.invalid };
+    if (r.qset != null && r.qset !== questionSetId(r.mode)) return { error: RECORD_ERRORS.qset };
     const qs = getQuestions(r.mode);
-    if (!qs.every((q) => r.answers[q.id] >= 1 && r.answers[q.id] <= 5)) return null;
-    return { ...r, name: String(r.name || '未命名'), date: r.date || new Date().toISOString() };
+    if (!qs.every((q) => r.answers[q.id] >= 1 && r.answers[q.id] <= 5)) return { error: RECORD_ERRORS.invalid };
+    const res = scoreMbti(r.answers, r.mode);
+    if (!TYPES[res.type]) return { error: RECORD_ERRORS.invalid };
+    return {
+      rec: {
+        ...r,
+        name: String(r.name || '未命名'),
+        date: typeof r.date === 'string' && r.date ? r.date : new Date().toISOString(),
+        type: res.type,
+        percents: Object.fromEntries(Object.entries(res.dims).map(([k, d]) => [k, d.aPct])),
+      },
+    };
   } catch {
-    return null;
+    return { error: RECORD_ERRORS.invalid };
   }
+}
+
+/**
+ * 配對頁載入存檔用：與結果頁相同，依作答重新計分取得類型並確認是十六型之一。
+ * 回傳 { type, name } 或 { error }。
+ */
+export function typeFromRecord(text) {
+  const { rec, error } = checkRecord(text);
+  if (!rec) return { error };
+  const { type } = scoreMbti(rec.answers, rec.mode);
+  if (!TYPES[type]) return { error: RECORD_ERRORS.invalid };
+  return { type, name: rec.name };
+}
+
+/** 驗證並還原從本機載入的 JSON；失敗回傳 null */
+export function parseRecord(text) {
+  return checkRecord(text).rec || null;
 }
 
 /** 產生完整報告純文字（供複製/下載） */

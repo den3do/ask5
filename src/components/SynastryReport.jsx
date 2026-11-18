@@ -27,6 +27,9 @@ function NameText({ text, nameA, nameB }) {
 
 const TONE = { good: 'text-emerald-700', warn: 'text-amber-700' };
 
+/** 時間不詳且類型不穩定時，標出兩種可能（與個人頁人類圖卡一致） */
+const hdTypeText = (hd) => (hd.timeUncertainty && !hd.timeUncertainty.typeStable ? `${hd.timeUncertainty.alt.join(' 或 ')}（時間不詳）` : hd.typeInfo.type);
+
 function ChannelList({ title, hint, items, tone, nameA, nameB }) {
   return (
     <div className={`rounded-lg border p-3 ${tone}`}>
@@ -72,20 +75,21 @@ export default function SynastryReport({ onOpenSettings }) {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex justify-end"><HelpButton topic="synastry" label="雙人合盤說明" /></div>
       <Explainer title="雙人合盤怎麼看？" accent="rose">
-        <p>輸入兩人的生辰，同時用四個系統評估：<b>易經</b>看兩人世爻五行的生剋，<b>紫微</b>看命宮與夫妻宮的互照，<b>占星</b>看日月金火的跨盤相位（靈魂共鳴、情感溝通、吸引力），<b>人類圖</b>看通道如何互補。</p>
+        <p>輸入兩人的生辰，同時用五個體系評估：<b>八字</b>看日干、日支（夫妻宮）、生肖與喜用是否互補，<b>易經</b>看兩人世爻與卦宮五行的生剋，<b>紫微</b>看命宮與夫妻宮的互照，<b>占星</b>看日月金火的跨盤相位（靈魂共鳴、情感溝通、吸引力），<b>人類圖</b>看通道如何互補。任一方不知道出生時間時，紫微不比較，只剩四個體系。</p>
         <p>人類圖的「電磁」是各持通道一端、相遇產生強烈吸引；「同伴」是兩人都有完整通道、默契相近；「妥協」是一人完整、另一人只有一端，需要磨合。</p>
+        <p>某一體系兩人完全沒有交集（例如沒有任何跨盤相位）時標為「交集少」：代表無明顯共鳴也無明顯張力，不列入綜合平均。</p>
         <p>分數是本站自訂的啟發式估算，請當作「相處觀察重點」，而不是對關係的判決。</p>
       </Explainer>
 
       <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg px-4 py-3 text-xs font-sans">
-        ⚠ 下方預填的是<b>範例生辰</b>，不是你們的資料。請先改成真實的出生日期、時間與地點，再按「計算四維合盤」。
+        ⚠ 下方預填的是<b>範例生辰</b>，不是你們的資料。請先改成真實的出生日期、時間與地點，再按「計算五維合盤」。
       </div>
       <div className="border-l-4 border-sky-500 pl-3"><BirthForm title={`${(a.name || '').trim() || '甲方'} 的生辰（藍）`} value={a} onChange={setA} /></div>
       <div className="border-l-4 border-rose-500 pl-3"><BirthForm title={`${(b.name || '').trim() || '乙方'} 的生辰（紅）`} value={b} onChange={setB} /></div>
 
       <div className="flex justify-end">
         <button type="button" onClick={run} className="bg-pink-600 hover:bg-pink-700 text-white font-bold px-8 py-3 rounded-lg text-sm shadow-md flex items-center gap-2 font-sans">
-          <HeartHandshake className="w-4 h-4" />計算四維合盤
+          <HeartHandshake className="w-4 h-4" />計算五維合盤
         </button>
       </div>
 
@@ -106,12 +110,14 @@ export default function SynastryReport({ onOpenSettings }) {
             <div className="flex-1 w-full space-y-2">
               <p className="text-sm text-stone-300">{cmp.desc}</p>
               {cmp.dims.map((d) => (
-                <div key={d.key} className="flex items-center gap-2 text-xs">
-                  <span className="w-20 text-stone-300">{d.label}</span>
-                  <div className="flex-1 flex gap-1">{[1, 2, 3, 4, 5].map((n) => <i key={n} className={`h-2 flex-1 rounded ${n <= d.level ? 'bg-amber-500' : 'bg-stone-700'}`} />)}</div>
-                  <span className="w-16 text-right">{d.levelLabel}</span>
+                <div key={d.key} className="flex items-center gap-2 text-xs" title={d.neutral ? `${d.neutralNote}（不列入綜合平均）` : d.uncertain ? cmp.hdCaveat : undefined}>
+                  <span className="w-24 text-stone-300">{d.label}{d.uncertain && <span className="text-amber-300">＊</span>}</span>
+                  <div className="flex-1 flex gap-1">{[1, 2, 3, 4, 5].map((n) => <i key={n} className={`h-2 flex-1 rounded ${d.neutral ? 'bg-stone-600' : n <= d.level ? (d.uncertain ? 'bg-amber-500/50' : 'bg-amber-500') : 'bg-stone-700'}`} />)}</div>
+                  <span className={`w-16 text-right ${d.neutral ? 'text-stone-400' : ''}`}>{d.levelLabel}</span>
                 </div>
               ))}
+              {cmp.dims.some((d) => d.neutral) && <p className="text-[11px] text-stone-400">「交集少」＝{cmp.dims.find((d) => d.neutral).neutralNote}，不列入綜合平均。</p>}
+              {cmp.hdCaveat && <p className="text-[11px] text-amber-300">＊人類圖：出生時間不詳，結果僅供參考（詳見下方人類圖卡）。</p>}
             </div>
           </div>
 
@@ -125,7 +131,7 @@ export default function SynastryReport({ onOpenSettings }) {
               )}
             </div>
             <div className={`rounded-xl border p-4 ${ACCENT[DIM_ACCENT.iching]}`}>
-              <div className="font-bold text-sm mb-1">易經：世應五行（{cmp.iching.tier}）</div>
+              <div className="font-bold text-sm mb-1">易經：世爻・卦宮五行（{cmp.iching.tier}）</div>
               <p className="text-xs leading-relaxed"><NameText text={cmp.iching.dynamicSummary} nameA={nA} nameB={nB} /></p>
               {(cmp.iching.goldenRules?.length > 0) && (
                 <ul className="text-xs mt-2 space-y-0.5 list-disc pl-4">
@@ -146,10 +152,11 @@ export default function SynastryReport({ onOpenSettings }) {
             <div className={`rounded-xl border p-4 ${ACCENT[DIM_ACCENT.astro]}`}>
               <div className="font-bold text-sm mb-1">占星：日月金火跨盤相位</div>
               <div className="text-[11px] mb-2 opacity-80">
-                {Object.entries(cmp.astro.themeScore).map(([k, v]) => `${k}：${['', '張力較大', '需要磨合', '互補成長', '默契良好', '高度共鳴'][v >= 85 ? 5 : v >= 75 ? 4 : v >= 65 ? 3 : v >= 55 ? 2 : 1]}`).join('　')}
+                {cmp.astroThemes.map((t) => `${t.theme}：${t.levelLabel}`).join('　')}
               </div>
+              {cmp.astroThemes.some((t) => t.neutral) && <div className="text-[11px] mb-2 opacity-70">「交集少」：該主題沒有任何跨盤相位，無明顯共鳴也無明顯張力。</div>}
               <ul className="text-xs space-y-0.5 max-h-48 overflow-y-auto">
-                {cmp.astro.aspects.length === 0 && <li>無明顯跨盤相位</li>}
+                {cmp.astro.aspects.length === 0 && <li>無明顯跨盤相位（兩人星盤交集少，並不代表衝突）</li>}
                 {cmp.astro.aspects.slice(0, 12).map((x) => (
                   <li key={`${x.a}-${x.b}`} className={x.tone === 'tension' ? 'text-amber-700' : x.tone === 'harmonious' ? 'text-emerald-700' : ''}>
                     <b className={CLR_A}>{nA}</b>{x.labelA} {x.symbol} <b className={CLR_B}>{nB}</b>{x.labelB}（{x.name}，{x.orb.toFixed(1)}°）
@@ -160,8 +167,14 @@ export default function SynastryReport({ onOpenSettings }) {
 
             <div className={`rounded-xl border p-4 ${ACCENT[DIM_ACCENT.hd]}`}>
               <div className="font-bold text-sm mb-2">
-                人類圖：<span className={CLR_A}>{nA}</span> {result.pA.hd.typeInfo.type} × <span className={CLR_B}>{nB}</span> {result.pB.hd.typeInfo.type}
+                人類圖：<span className={CLR_A}>{nA}</span> {hdTypeText(result.pA.hd)} × <span className={CLR_B}>{nB}</span> {hdTypeText(result.pB.hd)}
               </div>
+              {cmp.hdCaveat && (
+                <div className="text-[11px] mb-2 rounded border border-amber-300 bg-amber-50 text-amber-800 px-2 py-1">
+                  ⚠ <NameText text={cmp.hdCaveat} nameA={nA} nameB={nB} />
+                </div>
+              )}
+              {(() => { const d = cmp.dims.find((x) => x.key === 'hd'); return d?.neutral ? <div className="text-[11px] mb-2 opacity-70">兩人沒有電磁、同伴或妥協通道：{d.neutralNote}。</div> : null; })()}
               <div className="grid grid-cols-1 gap-2">
                 <ChannelList title="電磁通道・致命火花" hint="各持一端，相遇即強烈吸引" items={cmp.hd.electromagnetic} tone="border-rose-200 bg-white/70" nameA={nA} nameB={nB} />
                 <ChannelList title="同伴通道・長久默契" hint="兩人皆有完整通道" items={cmp.hd.companion} tone="border-emerald-200 bg-white/70" nameA={nA} nameB={nB} />

@@ -12,20 +12,22 @@ const R_OUT = 236;
 const R_ZOD = 192;
 const R_PLANET = 160;
 const R_ASPECT = 100;
-const NAMES = { sun: '太陽', moon: '月亮', mercury: '水星', venus: '金星', mars: '火星', jupiter: '木星', saturn: '土星', uranus: '天王星', neptune: '海王星', pluto: '冥王星' };
+const NAMES = { sun: '太陽', moon: '月亮', mercury: '水星', venus: '金星', mars: '火星', jupiter: '木星', saturn: '土星', uranus: '天王星', neptune: '海王星', pluto: '冥王星', northNode: '北交點' };
 const ASP_LEGEND = [['合相', '#f59e0b'], ['六分相', '#3b82f6'], ['三分相', '#10b981'], ['四分相', '#ef4444'], ['對分相', '#8b5cf6']];
 
 const ELEMENT_FILL = { 火: '#7f1d1d', 土: '#78350f', 風: '#0c4a6e', 水: '#1e3a8a' };
 const PLANET_COLOR = {
   sun: '#fbbf24', moon: '#93c5fd', mercury: '#5eead4', venus: '#f9a8d4', mars: '#f87171',
   jupiter: '#6ee7b7', saturn: '#cbd5e1', uranus: '#67e8f9', neptune: '#a5b4fc', pluto: '#c4b5fd',
+  northNode: '#bef264',
 };
-const GLYPH = { sun: '☉', moon: '☽', mercury: '☿', venus: '♀', mars: '♂', jupiter: '♃', saturn: '♄', uranus: '♅', neptune: '♆', pluto: '♇' };
+const GLYPH = { sun: '☉', moon: '☽', mercury: '☿', venus: '♀', mars: '♂', jupiter: '♃', saturn: '♄', uranus: '♅', neptune: '♆', pluto: '♇', northNode: '☊' };
 const TEXT = '︎'; // 強制文字樣式，避免被換成 emoji
 
-/** 本命星盤圓盤（上升點在左側，逆時針為黃道順行） */
+/** 本命星盤圓盤（上升點在左側，逆時針為黃道順行）。出生時間不詳時以太陽定向，不畫 AC/MC 與宮位編號 */
 function NatalWheel({ chart }) {
   const asc = chart.asc.lon;
+  const known = !chart.timeUnknown;
   const pt = (r, lon) => {
     const th = ((180 + (lon - asc)) * Math.PI) / 180;
     return [CX + r * Math.cos(th), CY - r * Math.sin(th)];
@@ -79,7 +81,7 @@ function NatalWheel({ chart }) {
       })}
       <circle cx={CX} cy={CY} r={R_ZOD} fill="none" stroke="#64748b" strokeWidth="0.8" />
 
-      {/* 宮位（整宮制）編號 */}
+      {/* 宮位（整宮制）編號；時間不詳時只留星座分隔線、不標編號 */}
       {Array.from({ length: 12 }).map((_, i) => {
         const start = Math.floor(asc / 30) * 30 + i * 30;
         const [x1, y1] = pt(R_ASPECT + 6, start);
@@ -88,19 +90,19 @@ function NatalWheel({ chart }) {
         return (
           <g key={i}>
             <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#64748b" strokeWidth="0.8" />
-            <text x={hx} y={hy} textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="700" fill="#cbd5e1">{i + 1}</text>
+            {known && <text x={hx} y={hy} textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="700" fill="#cbd5e1">{i + 1}</text>}
           </g>
         );
       })}
       <circle cx={CX} cy={CY} r={R_ASPECT + 6} fill="#0b1226" stroke="#475569" strokeWidth="0.6" />
 
-      {/* 軸線 ASC-DSC、MC-IC */}
-      {[asc, chart.mc.lon].map((lon, i) => {
+      {/* 軸線 ASC-DSC、MC-IC（時間不詳時沒有真實軸點，不畫） */}
+      {known && [asc, chart.mc.lon].map((lon, i) => {
         const [x1, y1] = pt(R_ZOD, lon);
         const [x2, y2] = pt(R_ZOD, lon + 180);
         return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#fbbf24" strokeOpacity="0.45" strokeWidth="1" strokeDasharray="4 3" />;
       })}
-      {[['AC', asc], ['MC', chart.mc.lon]].map(([label, lon]) => {
+      {known && [['AC', asc], ['MC', chart.mc.lon]].map(([label, lon]) => {
         const [x, y] = pt(R_OUT + 18, lon);
         return <text key={label} x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize="15" fontWeight="800" fill="#fbbf24">{label}</text>;
       })}
@@ -159,7 +161,7 @@ export default function AstroPanel({ profile, onOpenSettings }) {
                   <div key={id} className="flex items-center gap-2">
                     <span className="text-2xl w-8 text-center" style={{ color: PLANET_COLOR[id] }}>{GLYPH[id]}{TEXT}</span>
                     <span className="w-16 font-bold">{NAMES[id]}</span>
-                    <span className="text-slate-300">{chart.positions[id].sign.name} {Math.floor(chart.positions[id].sign.degree)}°・第 {chart.positions[id].house} 宮</span>
+                    <span className="text-slate-300">{chart.positions[id].sign.name} {Math.floor(chart.positions[id].sign.degree)}°・{chart.timeUnknown ? '宮位 —' : `第 ${chart.positions[id].house} 宮`}</span>
                   </div>
                 ))}
               </div>
@@ -168,7 +170,7 @@ export default function AstroPanel({ profile, onOpenSettings }) {
                   <span key={n} className="flex items-center gap-1.5"><i className="inline-block w-6 h-1 rounded" style={{ background: c }} />{n}</span>
                 ))}
               </div>
-              <p className="text-xs text-slate-400 leading-6">外環＝十二星座（火紅、土褐、風藍、水深藍）；圈內數字＝宮位；AC＝上升、MC＝天頂；行星旁數字＝在星座內的度數。</p>
+              <p className="text-xs text-slate-400 leading-6">外環＝十二星座（火紅、土褐、風藍、水深藍）；{chart.timeUnknown ? '出生時間不詳，不標宮位與 AC／MC，圓盤改以太陽位置置於左側；' : '圈內數字＝宮位；AC＝上升、MC＝天頂；'}☊＝北交點；行星旁數字＝在星座內的度數。</p>
             </div>
           </div>
           <AstroChart chart={chart} personName={profile.name} />

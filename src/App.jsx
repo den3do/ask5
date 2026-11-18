@@ -76,7 +76,7 @@ const DivinationApp = () => {
     return `${c.year}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
   });
   const [divHourIdx, setDivHourIdx] = useState(
-    new Date().getHours() >= 23 ? 0 : Math.ceil(new Date().getHours() / 2) % 12
+    Math.floor((new Date().getHours() + 1) / 2) % 12 // 子=23–01、丑=01–03…
   );
   const [divTopic, setDivTopic] = useState('財運');
   const [divGender, setDivGender] = useState('男'); // 感情／婚姻：男看妻財、女看官鬼
@@ -136,7 +136,8 @@ const DivinationApp = () => {
 
     const linesWithYongShen = linesData.map(l => ({
       ...l,
-      isYongShen: l.relation === evaluation.yongShen.relation
+      // 只標實際取用的那一爻（用神多現時其餘同六親爻不標；伏神時由表格的伏神列標示）
+      isYongShen: !evaluation.yongShen.isFu && l.lineNum === evaluation.yongShen.lineNum
     }));
 
     setDivResult({
@@ -233,7 +234,7 @@ ${linesStr}
                 易數神策 ‧ 命理排盤系統
               </h1>
               <p className="hidden md:block text-stone-400 text-sm mt-1">
-                易經六爻 ‧ 紫微斗數 ‧ 西洋占星 ‧ 人類圖 ‧ 四維全象報告與雙人合盤
+                易經六爻 ‧ 紫微斗數 ‧ 西洋占星 ‧ 人類圖 ‧ 全象報告與雙人合盤
               </p>
             </div>
 
@@ -577,6 +578,17 @@ ${linesStr}
                         )}
                       </div>
                     </div>
+
+                    {divResult.evaluation.notes?.length > 0 && (
+                      <div className="bg-stone-100 border border-stone-200 rounded-lg p-4">
+                        <div className="text-xs font-bold text-stone-700 mb-2">取用說明（不計入有利或不利）</div>
+                        <ul className="text-xs text-stone-600 space-y-1.5 list-disc list-inside">
+                          {divResult.evaluation.notes.map((n, idx) => (
+                            <li key={idx}>{n}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -596,6 +608,7 @@ ${linesStr}
                   pillars={divResult.pillars}
                   fuShen={divResult.fuShen}
                   yongShenRelation={divResult.evaluation.yongShen.relation}
+                  yongShenLineNum={divResult.evaluation.yongShen.isFu ? null : divResult.evaluation.yongShen.lineNum}
                   headerRight={(
                     <>
                       用神：<strong className="text-indigo-600">{divResult.evaluation.yongShen.name}</strong> ({divResult.evaluation.yongShen.wuxing}・{divResult.evaluation.yongShen.status}氣)

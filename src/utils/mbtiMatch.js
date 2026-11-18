@@ -96,15 +96,19 @@ export function buildMatchGuide(a, b) {
   if (fnA[0] === fnB[0]) {
     insights.push({ kind: '共同語言', text: `你們的主導功能同為 ${fnA[0]}(${FN_NAMES[fnA[0]]}),看事情的核心方式一致,容易有「被懂」的感覺。` });
   }
-  if (fnA[0] === fnB[1] || fnB[0] === fnA[1]) {
-    const [p, q] = fnA[0] === fnB[1] ? [an, bn] : [bn, an];
-    const f = fnA[0] === fnB[1] ? fnA[0] : fnB[0];
-    insights.push({ kind: '相互欣賞', text: `${p}最擅長的 ${f} 正是${q}的輔助功能,${q}會自然欣賞並受益於${p}的這項強項。` });
+  // 兩個方向分別檢查:兩者都成立時(例如 INTJ×ENTJ、INTJ×ESTP)兩條都列出
+  const dirs = [[fnA, fnB, an, bn], [fnB, fnA, bn, an]];
+  for (const [fp, fq, p, q] of dirs) {
+    if (fp[0] === fq[1]) {
+      const f = fp[0];
+      insights.push({ kind: '相互欣賞', text: `${p}最擅長的 ${f} 正是${q}的輔助功能,${q}會自然欣賞並受益於${p}的這項強項。` });
+    }
   }
-  if (fnA[0] === fnB[3] || fnB[0] === fnA[3]) {
-    const [p, q] = fnA[0] === fnB[3] ? [an, bn] : [bn, an];
-    const f = fnA[0] === fnB[3] ? fnA[0] : fnB[0];
-    insights.push({ kind: '吸引與摩擦', text: `${p}的主導功能 ${f}(${FN_NAMES[f]})正好是${q}最不擅長、最需要成長的部分——${q}會被${p}吸引,也容易在這裡感到壓力。多些耐心,這裡是彼此學習最多的地方。` });
+  for (const [fp, fq, p, q] of dirs) {
+    if (fp[0] === fq[3]) {
+      const f = fp[0];
+      insights.push({ kind: '吸引與摩擦', text: `${p}的主導功能 ${f}(${FN_NAMES[f]})正好是${q}最不擅長、最需要成長的部分——${q}會被${p}吸引,也容易在這裡感到壓力。多些耐心,這裡是彼此學習最多的地方。` });
+    }
   }
   const shared = fnA.slice(0, 2).filter((f) => fnB.slice(0, 2).includes(f));
   if (shared.length && fnA[0] !== fnB[0]) {

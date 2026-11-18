@@ -142,7 +142,7 @@ export function analyzeBazi(pillars, opts = {}) {
   const deLing = monthWx === dmWx || GEN[monthWx] === dmWx;
   const support = (grp.比劫 + grp.印) / total;
   const ratio = Math.round(support * 100);
-  // 通根：日主五行或其生我之五行，在各地支藏干中的力量（月令最重）
+  // 通根：與日主同五行的地支藏干力量（月令最重）；生我之五行（印）另計入印比占比，不算通根
   let root = 0;
   for (const p of pillarsOut) {
     if (p.empty) continue;
@@ -199,16 +199,19 @@ export function analyzeBazi(pillars, opts = {}) {
     primaryGroup = grp.官殺 >= grp.食傷 + grp.財 ? '印' : (grp.印 <= grp.比劫 ? '印' : '比劫');
     favorGroups = [primaryGroup, ...['印', '比劫'].filter((g) => g !== primaryGroup)];
   }
-  // 太旺的喜神（占比超過四分之一）不再當作「補」的對象
+  // 太旺的喜神（占比達 28% 以上）不再當作「補」的對象
   let favorable = [...new Set(favorGroups.filter((g) => grpPct[g] < 28 || g === primaryGroup).map((g) => ge[g]))];
   let unfavorable = [...new Set(unfavorGroups.map((g) => ge[g]))].filter((e) => !favorable.includes(e));
   // 調候：寒暖燥濕失衡時，調候五行優先（冬生急火、夏生急水），並從忌神中移除；
   // 該五行在原局已過旺（占比 ≥ 30%）則不再補。
   const tiaohouEl = ['亥', '子', '丑'].includes(monthBranch) ? '火' : ['巳', '午', '未'].includes(monthBranch) ? '水' : '';
+  // 調候五行在命局中已達 30% 以上就不再提前，說明文字要跟著實際結果走
+  const tiaohouApplied = !!tiaohouEl && wxPct[tiaohouEl] < 30;
+  const tiaohouTail = tiaohouApplied ? '已列為優先喜用' : '命局中已占 30% 以上，不另提前';
   const tiaohou = !tiaohouEl ? '' : tiaohouEl === '火'
-    ? '生於冬月，寒濕偏重，命局宜見火暖局（調候：火，已列為優先喜用）。'
-    : '生於夏月，燥熱偏重，命局宜見水潤局（調候：水，已列為優先喜用）。';
-  if (tiaohouEl && wxPct[tiaohouEl] < 30) {
+    ? `生於冬月，寒濕偏重，命局宜見火暖局（調候：火，${tiaohouTail}）。`
+    : `生於夏月，燥熱偏重，命局宜見水潤局（調候：水，${tiaohouTail}）。`;
+  if (tiaohouApplied) {
     favorable = [tiaohouEl, ...favorable.filter((e) => e !== tiaohouEl)];
     unfavorable = unfavorable.filter((e) => e !== tiaohouEl);
   }

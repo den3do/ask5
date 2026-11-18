@@ -151,7 +151,7 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
                 <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs leading-snug text-slate-300">
                   {palace.minorStars.map((star, idx) => (
                     <span key={idx} className={`${
-                      ['擎羊', '陀羅', '火星', '鈴星', '天空', '地空', '地劫'].includes(star.name)
+                      ['擎羊', '陀羅', '火星', '鈴星', '地空', '地劫'].includes(star.name)
                         ? 'text-rose-400 font-semibold'
                         : ['左輔', '右弼', '天魁', '天鉞', '文昌', '文曲'].includes(star.name)
                         ? 'text-cyan-300 font-semibold'
@@ -193,7 +193,7 @@ export default function ZiweiPlate({ astrolabeData, personName = '命主' }) {
             <div className="space-y-1">
               <div className="text-amber-500 text-xs tracking-widest uppercase flex items-center justify-center gap-1.5 font-sans">
                 <Compass className="w-3.5 h-3.5" />
-                <span>文王後天 ‧ 紫微斗數全盤</span>
+                <span>紫微斗數全盤</span>
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-white tracking-wider">
                 {personName} 之本命盤

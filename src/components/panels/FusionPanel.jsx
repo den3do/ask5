@@ -98,12 +98,12 @@ export default function FusionPanel({ profile, onOpenSettings }) {
       </div>
 
       <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-amber-50 p-6 shadow-sm">
-        <SectionTitle sub="紫微 × 人類圖 × 西洋占星，找出共識與張力後整理而成">融合總論</SectionTitle>
+        <SectionTitle sub={`${summary.systems.join(' × ')}，找出共識與張力後整理而成${p.ziwei ? '' : '（出生時間不詳，紫微未排）'}`}>融合總論</SectionTitle>
         {summary.themes.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4 font-sans">
             {summary.themes.map((t) => (
               <span key={t.key} className="px-3 py-1 rounded-full bg-white border border-rose-300 text-xs font-bold text-rose-800" title={t.desc}>
-                {t.label}・{t.by.length}/3 家
+                {t.label}・{t.by.length}/{summary.systemCount} 家
               </span>
             ))}
           </div>

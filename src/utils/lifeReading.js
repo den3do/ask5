@@ -64,14 +64,15 @@ const palaceTone = (palaces, p) => { const t = toneOf(scorePalace(palaces, p)); 
 const starLabel = (s) => `${s.name}${s.brightness ? `（${s.brightness}）` : ''}${s.mutagen ? `化${s.mutagen}` : ''}`;
 const weak = (s) => (ZW_BRIGHT[s.brightness] ?? 0) <= -1;
 
+/** 輔星分類：只有 good 列為助力、bad 列為阻力；mid（如天馬，不計分）另列為中性 */
 function auxNotes(p) {
-  const good = []; const bad = [];
+  const good = []; const bad = []; const mid = [];
   p.minorStars.forEach((m) => {
     const a = ZW_AUX[m.name];
     if (!a) return;
-    (a.k === 'bad' ? bad : good).push(`${m.name}（${a.t}）`);
+    ({ good, bad }[a.k] || mid).push(`${m.name}（${a.t}）`);
   });
-  return { good, bad };
+  return { good, bad, mid };
 }
 
 const ZW_FIELD = { 官祿: 'w', 財帛: 'm', 夫妻: 'l', 疾厄: 'h' };
@@ -86,8 +87,8 @@ function palaceText(palaces, p) {
     const body = field ? d[field] : `${d.g}；需留意${d.b}`;
     return `${starLabel(s)}：${field === 'h' ? `體質較易出現${body}` : body}${weak(s) ? '（星曜落陷，優點打折、缺點放大）' : ''}`;
   });
-  const { good, bad } = auxNotes(p);
-  const muts = [...p.majorStars, ...p.minorStars].filter((s) => s.mutagen).map((s) => `${s.name}化${s.mutagen}：${ZW_MUTAGEN[s.mutagen].t}`);
+  const { good, bad, mid } = auxNotes(p);
+  const muts =[...p.majorStars, ...p.minorStars].filter((s) => s.mutagen).map((s) => `${s.name}化${s.mutagen}：${ZW_MUTAGEN[s.mutagen].t}`);
   let t = `${info.dom}｜${borrowed ? '本宮無主星，借對宮' : ''}${parts.join('；')}。`;
   const sf = sanFangPalaces(palaces, p);
   if (sf?.opposite) {
@@ -96,6 +97,7 @@ function palaceText(palaces, p) {
   }
   if (good.length) t += ` 助力：${good.join('、')}。`;
   if (bad.length) t += ` 阻力：${bad.join('、')}。`;
+  if (mid.length) t += ` 另見：${mid.join('、')}（中性，不計吉凶）。`;
   if (muts.length) t += ` ${muts.join('；')}。`;
   return t;
 }
@@ -348,15 +350,20 @@ export function buildAstroStory(chart) {
   const sat = pos.saturn.house; const ura = pos.uranus.house; const jup = pos.jupiter.house;
   const houseNote = (h, what) => (unknown ? '' : ` 你的${what}在第 ${h} 宮，焦點在「${AS_HOUSE[h]}」。`);
   const T = Object.fromEntries(calculateLifeTransits(chart).map((t) => [t.key, t]));
-  const ageRange = (t) => (t && t.ages.length ? `約 ${Math.min(...t.ages).toFixed(0)}–${Math.max(...t.ages).toFixed(0)} 歲` : '');
+  const hasHit = (t) => !!(t && t.ages.length);
+  const ageRange = (t) => {
+    const lo = Math.min(...t.ages).toFixed(0); const hi = Math.max(...t.ages).toFixed(0);
+    return lo === hi ? `約 ${lo} 歲` : `約 ${lo}–${hi} 歲`;
+  };
+  // 行運搜尋區間內沒有精確命中時，整段省略，不留「土星回歸：」這種空白標籤
   const stages = [
     { range: '0–12 歲', title: '性格成形', tone: 'mid', text: `${moonVaries ? '月亮星座不確定，情感模式請以家人觀察為準。' : `月亮${moon.name}的情感模式在此階段養成：${S(moon).moon}。`}` },
-    { range: T.jupReturn ? `木星回歸：${T.jupReturn.ages.map((a) => a.toFixed(0)).join(' / ')} 歲` : '木星回歸', title: '木星回歸（每 12 年，依本命實算）', tone: 'good', text: `機會與擴張的循環。${unknown ? '' : `你的木星在第 ${jup} 宮，這些年份在「${AS_HOUSE[jup]}」較容易遇到成長與貴人。`}` },
-    { range: T.nodeReturn ? `北交點回歸：${ageRange(T.nodeReturn)}` : '北交點回歸', title: '人生方向的第一次校準', tone: 'mid', text: `${T.nodeReturn.text} 常伴隨升學、離家或重大選擇。` },
-    { range: T.satReturn1 ? `土星回歸：${ageRange(T.satReturn1)}` : '土星回歸', title: '第一次土星回歸（依本命實算）', tone: 'mid', text: `${T.satReturn1.text} 這是責任與現實的重整期，常見轉職、關係定位與生活方式的調整。${houseNote(sat, '土星')}` },
-    { range: T.uraOpp ? `天王星對分：${ageRange(T.uraOpp)}` : '天王星對分', title: '中年轉化（依本命實算）', tone: 'mid', text: `${T.uraOpp.text} 傾向帶來「想改變」的衝動。${houseNote(ura, '天王星')}` },
-    { range: T.satReturn2 ? `第二次土星回歸：${ageRange(T.satReturn2)}` : '第二次土星回歸', title: '收穫與整理（依本命實算）', tone: 'mid', text: `${T.satReturn2.text}${unknown ? '' : ` 回到「${AS_HOUSE[sat]}」整理一生成果。`}` },
-  ];
+    hasHit(T.jupReturn) && { range: `木星回歸：${uniq(T.jupReturn.ages.map((a) => a.toFixed(0))).join(' / ')} 歲`, title: '木星回歸（每 12 年，依本命實算）', tone: 'good', text: `機會與擴張的循環。${unknown ? '' : `你的木星在第 ${jup} 宮，這些年份在「${AS_HOUSE[jup]}」較容易遇到成長與貴人。`}` },
+    hasHit(T.nodeReturn) && { range: `北交點回歸：${ageRange(T.nodeReturn)}`, title: '人生方向的第一次校準', tone: 'mid', text: `${T.nodeReturn.text} 常伴隨升學、離家或重大選擇。` },
+    hasHit(T.satReturn1) && { range: `土星回歸：${ageRange(T.satReturn1)}`, title: '第一次土星回歸（依本命實算）', tone: 'mid', text: `${T.satReturn1.text} 這是責任與現實的重整期，常見轉職、關係定位與生活方式的調整。${houseNote(sat, '土星')}` },
+    hasHit(T.uraOpp) && { range: `天王星對分：${ageRange(T.uraOpp)}`, title: '中年轉化（依本命實算）', tone: 'mid', text: `${T.uraOpp.text} 傾向帶來「想改變」的衝動。${houseNote(ura, '天王星')}` },
+    hasHit(T.satReturn2) && { range: `第二次土星回歸：${ageRange(T.satReturn2)}`, title: '收穫與整理（依本命實算）', tone: 'mid', text: `${T.satReturn2.text}${unknown ? '' : ` 回到「${AS_HOUSE[sat]}」整理一生成果。`}` },
+  ].filter(Boolean);
 
   return {
     labels: { good: '順', mid: '平', bad: '挑戰' },

@@ -45,7 +45,7 @@ export function computeDestiny(f) {
     sDay = solar.day;
   }
 
-  const pillars = calculatePillars(sYear, sMonth, sDay, hIdx, { utc: f.moment?.utc });
+  const pillars = calculatePillars(sYear, sMonth, sDay, hIdx, { utc: f.moment?.utc, hourStemDayShift: f.moment?.chinese?.hourStemDayShift });
   const hexNums = calculateDestinyHexNumbers(lYear, lMonth, lDay, hIdx);
 
   const notes = [];

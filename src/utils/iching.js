@@ -392,6 +392,7 @@ export const evaluateDivination = ({
   let totalScore = 0;
   const reasons = [];
   const warnings = [];
+  const notes = []; // 取用方式等說明，不算有利也不算不利
   const strengths = [];
 
   // 旬空的實際效力：動爻不空、月建所臨不空；日辰沖之為「沖空」（出空而實）
@@ -417,7 +418,7 @@ export const evaluateDivination = ({
     const movers = candidates.filter(l => l.isMoving);
     const pool = movers.length ? movers : candidates;
     yongShenLine = [...pool].sort((a, b) => (strengthOf(b) + (b.isShi ? 0.5 : 0)) - (strengthOf(a) + (a.isShi ? 0.5 : 0)))[0];
-    warnings.push(`卦中【${yongShenInfo.name}】共現 ${candidates.length} 爻（用神多現），已${movers.length ? '以發動者' : '比較月令、日辰旺衰後'}取第 ${yongShenLine.lineNum} 爻為用神；傳統另有「取其旺者」以外的取法，僅供參考。`);
+    notes.push(`卦中【${yongShenInfo.name}】共現 ${candidates.length} 爻（用神多現），已${movers.length ? '以發動者' : '比較月令、日辰旺衰後'}取第 ${yongShenLine.lineNum} 爻為用神；傳統另有「取其旺者」以外的取法，僅供參考。`);
   } else {
     // 用神不現：查伏神（本宮八純卦同位之爻），伏於飛神之下
     const pure = palaceId != null ? NAJIA_TABLE[palaceId] : null;
@@ -430,14 +431,14 @@ export const evaluateDivination = ({
         lineNum: idx + 1, branch: b, wuxing: BRANCH_WUXING[b], relation: targetRelation,
         isKongWang: pillars.kongWang.includes(b), isMoving: false, isShi: false, isFu: true, fly,
       };
-      warnings.push(`卦中【${yongShenInfo.name}】不現，取伏神：${b}${yongShenLine.wuxing}伏於第 ${idx + 1} 爻飛神（${fly.branch}${fly.wuxing}）之下，須待飛神被沖、被剋或空破才易引出，力量較用神現身為弱。`);
+      notes.push(`卦中【${yongShenInfo.name}】不現，取伏神：${b}${yongShenLine.wuxing}伏於第 ${idx + 1} 爻飛神（${fly.branch}${fly.wuxing}）之下，須待飛神被沖、被剋或空破才易引出，力量較用神現身為弱。`);
       const f = WUXING_RELATION[fly.wuxing]?.[yongShenLine.wuxing];
       if (f === '生') { totalScore += 1; strengths.push('飛神生伏神，伏藏之用神得助'); }
       else if (f === '剋') { totalScore -= 2; warnings.push('飛神剋伏神，伏藏之用神受制難出'); }
     } else {
       yongShenLine = shiLine;
       ysSubstitute = true;
-      warnings.push(`卦中【${yongShenInfo.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
+      notes.push(`卦中【${yongShenInfo.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
     }
   }
 
@@ -469,7 +470,8 @@ export const evaluateDivination = ({
   const ysDayRelation = WUXING_RELATION[dayWuxing][ys.wuxing]; // 日辰對用神
   const ysLinRi = ys.branch === pillars.dayBranch;
   const isYsYuePo = ys.branch === pillars.yuePoBranch;
-  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving;
+  // 旬空之用神逢日沖為「沖空」（出空而實），不另算日破
+  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving && !ys.isKongWang;
   const ysKong = effectiveKong(ys);
   const daiWang = ysMonthStatus.score > 0 || ysDayRelation === '生' || ysLinRi; // 帶旺匪空
   const trueKong = ysKong && !daiWang;
@@ -527,7 +529,7 @@ export const evaluateDivination = ({
 
   // 旬空判定（旺相或得日生者為「帶旺匪空」，只是暫緩）
   if (ys.isKongWang && !ysKong) {
-    warnings.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
+    notes.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
   }
   if (ysKong && daiWang) {
     totalScore -= 1;
@@ -604,7 +606,7 @@ export const evaluateDivination = ({
     } else if (mvRole === '元神') {
       // 元神須旺相方能生用神；用神無根則元神有力亦難生
       if (wuGen) {
-        warnings.push(`元神${mvLabel}發動生用神，但用神月破或真空、又無日辰扶持，「用神無根，元神有力亦難生」，不計加分`);
+        notes.push(`元神${mvLabel}發動生用神，但用神月破或真空、又無日辰扶持，「用神無根，元神有力亦難生」，不計加分`);
       } else if (mvPowerful) {
         totalScore += 4;
         strengths.push(`元神${mvLabel}${mvBoost ? `動化${mvBack === '生' ? '回頭生' : '進神'}` : '旺相有力'}，發動生用神，所求之事得源源生助`);
@@ -720,8 +722,9 @@ export const evaluateDivination = ({
     `【怎麼讀這個結果】：${summary}`,
     `【有利之處】：${strengths.length > 0 ? strengths.map(clean).join('；') + '。' : '目前時機平平，未見顯著外力加持。'}`,
     warnings.length > 0 ? `【不利之處】：${warnings.map(clean).join('；')}。` : '【不利之處】：盤面未見重大沖煞剋害，外部阻力較輕。',
+    notes.length > 0 ? `【取用說明】：${notes.map(clean).join('；')}。` : null,
     `【建議】：${advice}`
-  ];
+  ].filter(Boolean);
 
   const fullCommentary = commentaryParts.join('\n\n');
 
@@ -731,6 +734,7 @@ export const evaluateDivination = ({
     badgeClass,
     strengths,
     warnings,
+    notes,
     advice,
     summary,
     mixed,

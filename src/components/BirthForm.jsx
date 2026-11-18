@@ -3,6 +3,7 @@ import { Save, FolderOpen, UserRound } from 'lucide-react';
 import { CITY_LIST } from '../utils/astrology';
 import { downloadBirthProfile, parseBirthProfile } from '../utils/savedProfiles';
 import { resolveBirth } from '../utils/profile';
+import { lateZiHint, solarCrossHint } from '../utils/chineseTime';
 
 const inputCls = 'w-full border border-stone-300 rounded px-3 py-2 bg-stone-50 text-sm focus:border-indigo-600 focus:outline-none';
 
@@ -126,7 +127,7 @@ export default function BirthForm({ title, value, onChange }) {
           時辰改採真太陽時（預設為鐘錶時間；只影響時辰，不改日柱與農曆日）
         </label>
         <label className="flex items-center gap-2">
-          夜子時（23:00–00:59）
+          夜子時（23:00–23:59）
           <select value={r.zishi} onChange={set('zishi')} className="border border-stone-300 rounded px-2 py-1 bg-stone-50">
             <option value="next">晚子時算次日（日柱換日）</option>
             <option value="same">早晚子時（日柱不換）</option>
@@ -142,7 +143,8 @@ export default function BirthForm({ title, value, onChange }) {
             星盤與人類圖直接用絕對時刻（UTC）計算，與此設定無關。
           </p>
           {m?.tzNote && <p className="text-amber-600">⚠ {m.tzNote}</p>}
-          {m?.chinese?.lateZi && <p className="text-amber-600">⚠ 23:00 後為夜子時，本站依「夜子時換日」以次日子時排盤。</p>}
+          {solarCrossHint(m) && <p className="text-amber-600">⚠ {solarCrossHint(m)}</p>}
+          {m?.chinese?.lateZi && <p className="text-amber-600">⚠ {lateZiHint(m.school, m.useTrueSolar)}</p>}
         </div>
       )}
     </div>

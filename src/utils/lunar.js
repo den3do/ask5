@@ -178,11 +178,13 @@ export function lunarYearOf(date = new Date()) {
  *  - 年柱：以太陽到達黃經 315°（立春）的真實時刻換年
  *  - 月柱：以太陽黃經每 30° 的「節」真實時刻換月，月干用五虎遁
  *  - 日柱：以（已套用夜子時換日的）日期計算
- *  - 時柱：五鼠遁
+ *  - 時柱：五鼠遁（時干依「日柱日期 + hourStemDayShift 天」的日干推出）
  * @param {number} solarYear,solarMonth,solarDay  有效日期（若 23:00 後已換日，請傳入換日後的日期）
  * @param {number|null} hourBranchIdx             時辰 0(子)~11(亥)
  * @param {Object} [opts]
  * @param {Date}   [opts.utc]  出生（或占卜）的絕對時刻；省略時以該日該時辰中心、UTC+8 估算
+ * @param {number} [opts.hourStemDayShift=0]  時干改用前後幾天的五鼠遁：早晚子時的晚子時 = 1；
+ *                                            真太陽時退回前一天 = −1（見 chineseTime.js 的 chinese.hourStemDayShift）
  */
 export function calculatePillars(solarYear, solarMonth, solarDay, hourBranchIdx = null, opts = {}) {
   const y = parseInt(solarYear, 10);
@@ -190,9 +192,10 @@ export function calculatePillars(solarYear, solarMonth, solarDay, hourBranchIdx 
   const d = parseInt(solarDay, 10);
 
   const hasHour = hourBranchIdx !== null && hourBranchIdx !== undefined && hourBranchIdx >= 0 && hourBranchIdx < 12;
+  const stemShift = Number.isInteger(opts.hourStemDayShift) ? opts.hourStemDayShift : 0;
   const utc = opts.utc instanceof Date && !Number.isNaN(opts.utc.getTime())
     ? opts.utc
-    : localToUtcDate({ year: y, month: m, day: d, hour: hasHour ? hourBranchIdx * 2 : 12, minute: 0, tz: 8 });
+    : localToUtcDate({ year: y, month: m, day: d, hour: hasHour ? hourBranchIdx * 2 + stemShift * 24 : 12, minute: 0, tz: 8 });
 
   // 1. 年柱：真實立春時刻
   const calcYear = utc.getTime() < liChunInstant(y).getTime() ? y - 1 : y;
@@ -223,9 +226,11 @@ export function calculatePillars(solarYear, solarMonth, solarDay, hourBranchIdx 
   const hoursToJie = (nearestDeg / 0.9856) * 24;
   const nearJie = hoursToJie < 12;
   const nearJieName = degFromPrev <= degToNext ? JIE_NAMES[jieMonth] : JIE_NAMES[(jieMonth + 1) % 12];
-  const termWarning = nearJie
-    ? `出生時刻距「${nearJieName}」交節僅約 ${Math.max(1, Math.round(hoursToJie))} 小時，月柱（及立春前後的年柱）對出生時間與時區極敏感，請務必確認時間。`
-    : null;
+  const jieHours = Math.max(1, Math.round(hoursToJie));
+  // 沒有時辰時（出生時間不詳）utc 只是當日中午的代用值，不能說成「出生時刻距…」
+  const termWarning = !nearJie ? null : hasHour
+    ? `出生時刻距「${nearJieName}」交節僅約 ${jieHours} 小時，月柱（及立春前後的年柱）對出生時間與時區極敏感，請務必確認時間。`
+    : `出生時間不詳：以當日中午估算，距「${nearJieName}」交節僅約 ${jieHours} 小時（出生當天前後就交節），月柱（及立春前後的年柱）可能是交節前或交節後，請盡量確認出生時間。`;
 
   // 五虎遁月干：甲己之年丙作首，乙庚戊為頭，丙辛尋庚起，丁壬壬位流，戊癸甲何求
   const yStemIdx = STEMS.indexOf(yStem);
@@ -237,8 +242,9 @@ export function calculatePillars(solarYear, solarMonth, solarDay, hourBranchIdx 
   let hBranch = '';
   if (hasHour) {
     hBranch = BRANCHES[hourBranchIdx];
-    // 五鼠遁日
-    const startStemIdx = ((dStemIdx % 5) * 2) % 10;
+    // 五鼠遁日（晚子時／真太陽時跨午夜時，時干跟著該時辰實際所屬的那一天）
+    const stemDayIdx = (((dStemIdx + stemShift) % 10) + 10) % 10;
+    const startStemIdx = ((stemDayIdx % 5) * 2) % 10;
     hStem = STEMS[(startStemIdx + hourBranchIdx) % 10];
   }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sun, Star, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
-import { ZODIAC_SIGNS, PLANETS } from '../utils/astrology';
+import { majorAspectsByOrb } from '../utils/astrology';
 
 const PLANET_INFO = {
   sun: { label: '太陽', emoji: '☀️', desc: '本我意識、使命', textColor: 'text-amber-300' },
@@ -13,6 +13,7 @@ const PLANET_INFO = {
   uranus: { label: '天王星', emoji: '⚡', desc: '突破、革命', textColor: 'text-cyan-300' },
   neptune: { label: '海王星', emoji: '🌊', desc: '靈性、幻象', textColor: 'text-indigo-300' },
   pluto: { label: '冥王星', emoji: '💎', desc: '轉化、深層力量', textColor: 'text-purple-300' },
+  northNode: { label: '北交點', emoji: '☊', desc: '人生方向、成長課題', textColor: 'text-lime-300' },
   asc: { label: '上升點', emoji: '↑', desc: '外在人格、外表', textColor: 'text-orange-300' },
   mc: { label: '天頂', emoji: '⬆', desc: '事業、社會形象', textColor: 'text-yellow-300' },
 };
@@ -38,9 +39,13 @@ export default function AstroChart({ chart, personName = '命主' }) {
   if (!chart) return null;
 
   const { positions, aspects, sun, moon, asc } = chart;
-  const displayPlanets = showAllPlanets
-    ? ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'asc', 'mc']
-    : ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'asc'];
+  // 出生時間不詳：上升、天頂只是太陽盤占位值，不列出
+  const timeUnknown = !!chart.timeUnknown;
+  const displayPlanets = (showAllPlanets
+    ? ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'northNode', 'asc', 'mc']
+    : ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'asc'])
+    .filter((id) => !(timeUnknown && (id === 'asc' || id === 'mc')));
+  const majorAspects = majorAspectsByOrb(aspects);
 
   return (
     <div className="space-y-6 font-sans text-sm">
@@ -52,6 +57,15 @@ export default function AstroChart({ chart, personName = '命主' }) {
           { key: 'asc', label: '↑ 上升星座', desc: '外在人格', data: asc },
         ].map(({ key, label, desc, data }) => {
           if (!data) return null;
+          if (key === 'asc' && timeUnknown) {
+            return (
+              <div key={key} className="rounded-xl border p-4 bg-slate-800 text-slate-300 border-slate-700 flex flex-col gap-1 shadow">
+                <div className="text-xs opacity-70">{label} · {desc}</div>
+                <div className="text-xl font-black tracking-wide">未知</div>
+                <div className="text-[11px] opacity-70">出生時間不詳，無法確定</div>
+              </div>
+            );
+          }
           const elemClass = ELEMENT_COLORS[data.sign.element] || 'bg-slate-800 text-slate-300 border-slate-700';
           return (
             <div key={key} className={`rounded-xl border p-4 ${elemClass} flex flex-col gap-1 shadow`}>
@@ -103,13 +117,14 @@ export default function AstroChart({ chart, personName = '命主' }) {
       </div>
 
       {/* 主要相位列表 */}
-      {aspects.length > 0 && (
+      {majorAspects.length > 0 && (
         <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-800">
             <span className="text-amber-300 font-bold text-sm">🔺 主要行星相位（Major Aspects）</span>
+            <span className="ml-2 text-[11px] text-slate-500">合・六分・四分・三分・對分，依容許度由緊到鬆排列</span>
           </div>
           <div className="divide-y divide-slate-800 max-h-72 overflow-y-auto">
-            {aspects.map((asp, i) => {
+            {majorAspects.map((asp, i) => {
               const p1 = PLANET_INFO[asp.planet1];
               const p2 = PLANET_INFO[asp.planet2];
               const aspColor = ASPECT_COLORS[asp.name] || 'text-slate-400';

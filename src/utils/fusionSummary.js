@@ -50,13 +50,15 @@ const HD_TYPE = {
 
 const stars = (palace) => (palace?.majorStars || []).map((s) => s.name);
 
-/** 回傳每個系統的主題票與依據文字 */
-function collect(p) {
+/** 回傳每個系統的主題票、依據文字，以及可當「天賦」引用的紫微依據（不含陷／不與化忌註記） */
+export function collectThemeVotes(p) {
   const z = p.ziwei;
   const a = p.astro;
   const hd = p.hd;
-  const votes = { ziwei: new Map(), astro: new Map(), hd: new Map() };
+  // 紫微缺席（出生時間不詳）時不列入參與體系
+  const votes = z ? { ziwei: new Map(), astro: new Map(), hd: new Map() } : { astro: new Map(), hd: new Map() };
   const evidence = { ziwei: [], astro: [], hd: [] };
+  const talents = [];
   const vote = (sys, themes, why) => {
     themes.forEach((t) => votes[sys].set(t, (votes[sys].get(t) || 0) + 1));
     if (why) evidence[sys].push(why);
@@ -71,13 +73,20 @@ function collect(p) {
     const b = brightOf(n);
     if (/陷|不/.test(b)) { evidence.ziwei.push(`命宮${n}（${b}，${ZIWEI_STAR_TEXT[n]}之特質不易發揮）`); return; }
     const times = /廟|旺/.test(b) ? 2 : 1;
-    for (let i = 0; i < times; i += 1) vote('ziwei', ZIWEI_STAR[n], i === 0 ? `命宮${n}${b ? `［${b}］` : ''}（${ZIWEI_STAR_TEXT[n]}）` : undefined);
+    const why = `命宮${n}${b ? `［${b}］` : ''}（${ZIWEI_STAR_TEXT[n]}）`;
+    for (let i = 0; i < times; i += 1) vote('ziwei', ZIWEI_STAR[n], i === 0 ? why : undefined);
+    talents.push(why);
   });
   // 命宮坐生年化忌：該星特質帶有執著與壓力，不宜只看正面
   (z?.corePalaces.soul?.majorStars || []).filter((s) => s.mutagen === '忌').forEach((s) => evidence.ziwei.push(`命宮${s.name}化忌（${ZIWEI_STAR_TEXT[s.name] || '該星特質'}同時帶有執著與壓力）`));
   if (z && !soul.length) {
     // 命宮無主星：借對宮（遷移宮）星曜
-    stars(z.corePalaces.travel).forEach((n) => ZIWEI_STAR[n] && vote('ziwei', ZIWEI_STAR[n], `命宮無主星，借對宮${n}（${ZIWEI_STAR_TEXT[n]}）`));
+    stars(z.corePalaces.travel).forEach((n) => {
+      if (!ZIWEI_STAR[n]) return;
+      const why = `命宮無主星，借對宮${n}（${ZIWEI_STAR_TEXT[n]}）`;
+      vote('ziwei', ZIWEI_STAR[n], why);
+      talents.push(why);
+    });
   }
   const bodyStars = z ? stars(z.corePalaces.body) : [];
   bodyStars.forEach((n) => ZIWEI_STAR[n] && vote('ziwei', ZIWEI_STAR[n].slice(0, 1), `身宮${n}`));
@@ -96,84 +105,127 @@ function collect(p) {
   if (/情緒/.test(hd.authority) || hd.centers.solar?.isDefined) vote('hd', ['emotion'], `權威：${hd.authority}`);
   else if (/理智|無內在|外在|月亮/.test(hd.authority)) vote('hd', ['mind', 'relation'], `權威：${hd.authority}`);
   else evidence.hd.push(`權威：${hd.authority}`);
-  if (hd.centers.heart?.isDefined || hd.centers.ego?.isDefined) vote('hd', ['authority', 'independent'], '意志力中心已定義');
+  // 意志力（心臟／ego）中心在 humanDesign.js 的鍵名是 heart
+  if (hd.centers.heart?.isDefined) vote('hd', ['authority', 'independent'], '意志力（心臟）中心已定義');
   if (hd.centers.gCenter?.isDefined) vote('hd', ['vision']);
 
-  return { votes, evidence };
+  return { votes, evidence, talents };
+}
+
+// 共識門檻：至少兩家支持，且總票數 ≥ 3，避免只因粗標籤巧合重疊就稱「共識」
+const CONSENSUS_MIN_SYSTEMS = 2;
+const CONSENSUS_MIN_WEIGHT = 3;
+
+/**
+ * 內在拉扯（對立主題）判定：
+ * 1. 兩邊都投的體系視為「自己內部的層次」，不算在任何一邊（例如占星同時投情感與理性）。
+ * 2. 兩邊都至少要有一家「只投這一邊」，否則不列（避免「占星、人類圖 ↔ 占星、人類圖」）。
+ * 3. 其中一邊必須達到共識門檻（只投這邊的體系 ≥ 2 家且票數 ≥ 3）：
+ *    與「共同底色」同一把尺，代表「多家一致指向 X，但另一家指向相反」才算跨體系拉扯；
+ *    單一體系的一票（例如人類圖四種類型都投的「等待時機」）不會自己造成拉扯。
+ *    出生時間不詳、只剩兩家時，因無法同時滿足 2＋1 家，不會列出拉扯。
+ */
+export function findTensions(votes) {
+  const systems = Object.keys(votes);
+  const by = (key) => systems.filter((s) => votes[s].has(key));
+  const weightOf = (key, list) => list.reduce((n, s) => n + (votes[s].get(key) || 0), 0);
+  return TENSIONS.map(([x, y, title, advice]) => {
+    const bx = by(x);
+    const byY = by(y);
+    const onlyX = bx.filter((s) => !byY.includes(s));
+    const onlyY = byY.filter((s) => !bx.includes(s));
+    const strong = (list, key) => list.length >= CONSENSUS_MIN_SYSTEMS && weightOf(key, list) >= CONSENSUS_MIN_WEIGHT;
+    const ok = onlyX.length > 0 && onlyY.length > 0 && (strong(onlyX, x) || strong(onlyY, y));
+    return ok ? { keys: [x, y], title, advice, sideA: onlyX, sideB: onlyY } : null;
+  }).filter(Boolean);
 }
 
 /** 產生融合總論 */
 export function buildFusionSummary(p) {
-  const { votes, evidence } = collect(p);
+  const { votes, evidence, talents } = collectThemeVotes(p);
   const sys = { ziwei: '紫微', astro: '占星', hd: '人類圖' };
+  const systems = Object.keys(votes); // 實際參與的體系（時間不詳時沒有紫微）
+  const n = systems.length;
+  const fam = n === 3 ? '三家' : '兩家';
+  const names = (list) => list.map((s) => sys[s]).join('、');
 
   // 每個主題有幾家支持
   const support = Object.keys(THEMES).map((key) => {
-    const by = Object.keys(votes).filter((s) => votes[s].has(key));
-    const weight = Object.keys(votes).reduce((n, s) => n + (votes[s].get(key) || 0), 0);
-    return { key, ...THEMES[key], by, weight };
+    const by = systems.filter((s) => votes[s].has(key));
+    const weight = systems.reduce((m, s) => m + (votes[s].get(key) || 0), 0);
+    return { key, ...THEMES[key], by, weight, of: n };
   });
 
-  // 共識門檻：至少兩家支持，且總票數 ≥ 3，避免只因粗標籤巧合重疊就稱「共識」
-  const consensus = support.filter((t) => t.by.length >= 2 && t.weight >= 3).sort((a, b) => b.by.length - a.by.length || b.weight - a.weight).slice(0, 3);
+  const consensus = support.filter((t) => t.by.length >= CONSENSUS_MIN_SYSTEMS && t.weight >= CONSENSUS_MIN_WEIGHT).sort((a, b) => b.by.length - a.by.length || b.weight - a.weight).slice(0, 3);
   const solo = support.filter((t) => t.by.length === 1).sort((a, b) => b.weight - a.weight).slice(0, 2);
-  const tensions = TENSIONS
-    .filter(([x, y]) => {
-      const sx = support.find((t) => t.key === x);
-      const sy = support.find((t) => t.key === y);
-      return sx.by.length && sy.by.length && !(sx.by.length === 1 && sy.by.length === 1 && sx.by[0] === sy.by[0]);
-    })
-    .map(([x, y, title, advice]) => ({
-      title, advice,
-      sideA: support.find((t) => t.key === x).by.map((s) => sys[s]).join('、'),
-      sideB: support.find((t) => t.key === y).by.map((s) => sys[s]).join('、'),
-    }))
-    .slice(0, 2);
+  const tensions = findTensions(votes).slice(0, 2).map((t) => ({ ...t, sideA: names(t.sideA), sideB: names(t.sideB) }));
 
   const z = p.ziwei;
   const a = p.astro.positions;
   const hd = p.hd;
-  const soulName = z ? (stars(z.corePalaces.soul).join('、') || '無主星（借對宮）') : '（出生時間不詳，未排）';
+  const soulName = z ? (stars(z.corePalaces.soul).join('、') || '無主星（借對宮）') : null;
   const channelText = hd.definedChannels.length ? hd.definedChannels.slice(0, 3).map((c) => c.shortName).join('、') : '';
+  const hdUnsure = hd.timeUncertainty && !hd.timeUncertainty.typeStable;
 
-  // 開場：三家各用一句話描述自己
-  const intro = `${p.name}的盤面，紫微看到命宮${soulName}，占星看到${a.sun.sign.name}太陽${p.astro.timeUnknown ? '（出生時間不詳，無上升）' : `、${a.moon.sign.name}月亮、${a.asc.sign.name}上升`}，人類圖則是${hd.typeInfo.type}${hd.profileInfo.profile}${hd.timeUncertainty && !hd.timeUncertainty.typeStable ? '（類型待確認）' : ''}。三套系統語言不同，把它們放在一起看，最值得相信的是「多家重複指向」的部分。`;
+  // 開場：各家用一句話描述自己
+  const astroText = `占星看到${a.sun.sign.name}太陽${p.astro.timeUnknown ? '（出生時間不詳，無上升）' : `、${a.moon.sign.name}月亮、${a.asc.sign.name}上升`}`;
+  const hdText = `人類圖則是${hd.typeInfo.type}${hd.profileInfo.profile}${hdUnsure ? '（類型待確認）' : ''}`;
+  const intro = z
+    ? `${p.name}的盤面，紫微看到命宮${soulName}，${astroText}，${hdText}。三套系統語言不同，把它們放在一起看，最值得相信的是「多家重複指向」的部分。`
+    : `${p.name}的出生時間不詳，紫微無法排盤，這裡只用兩家：${astroText}，${hdText}。兩套系統語言不同，把它們放在一起看，最值得相信的是「兩家重複指向」的部分。`;
 
   const consensusText = consensus.length
-    ? `三家重疊最明顯的是：${consensus.map((t) => `「${t.label}」（${t.by.map((s) => sys[s]).join('、')}）`).join('、')}。${consensus[0].desc}；這是最像「本命底色」的部分，不論換哪套語言都會看到。`
-    : '三家各說各話，沒有特別集中的主題，代表你的性格層次多、情境不同會展現不同面向，建議以人類圖的策略與權威作為日常決策的主軸。';
+    ? `${fam}重疊最明顯的是：${consensus.map((t) => `「${t.label}」（${names(t.by)}）`).join('、')}。${consensus[0].desc}；這是最像「本命底色」的部分，不論換哪套語言都會看到。`
+    : `${fam}各說各話，沒有特別集中的主題，代表你的性格層次多、情境不同會展現不同面向，建議以人類圖的策略與權威作為日常決策的主軸。`;
 
-  const soloText = solo.length
-    ? `另外，${solo.map((t) => `${sys[t.by[0]]}特別強調「${t.label}」`).join('，')}，可視為單一視角下的補充面向，不必過度放大。`
+  // 單家強調：同一家的多個主題合併成一句（避免「紫微特別強調…，紫微特別強調…」）
+  const soloBySys = [];
+  solo.forEach((t) => {
+    const s = t.by[0];
+    const hit = soloBySys.find((x) => x.s === s);
+    if (hit) hit.labels.push(t.label); else soloBySys.push({ s, labels: [t.label] });
+  });
+  const soloText = soloBySys.length
+    ? `另外，${soloBySys.map((x) => `${sys[x.s]}特別強調${x.labels.map((l) => `「${l}」`).join('與')}`).join('，')}，可視為單一視角下的補充面向，不必過度放大。`
     : '';
 
   const tensionText = tensions.length
     ? tensions.map((t) => `· ${t.title}（${t.sideA} ↔ ${t.sideB}）。${t.advice}`).join('\n')
-    : '三家的方向相當一致，沒有明顯互相打架的地方。';
+    : n === 3
+      ? '沒有「兩家以上一致指向、另一家卻指向相反」的明顯拉扯，三家的方向大致相容。'
+      : '只有兩家可比，達不到判定拉扯的門檻（需要兩家一致、另一家相反），這段先略過。';
 
   const strengths = [];
   if (channelText) strengths.push(`人類圖已定義通道「${channelText}」是穩定可靠的天賦頻道`);
-  strengths.push(...evidence.ziwei.slice(0, 1).map((e) => `紫微${e}`));
+  // 天賦只引用有投票的紫微星曜（排除陷／不的落陷註記與化忌提醒）
+  strengths.push(...talents.slice(0, 1).map((e) => `紫微${e}`));
   strengths.push(`占星${evidence.astro[0]}的核心動能`);
 
   const open = Object.values(hd.centers).filter((c) => !c.isDefined).map((c) => c.chName);
   const lesson = `人類圖的「非自己主題」是${hd.typeInfo.notSelf}${open.length ? `，開放中心（${open.join('、')}）容易吸收外界影響` : ''}；當這些感覺出現，通常是偏離自己策略的訊號。`;
 
-  const action = `日常決策建議：以人類圖的策略「${hd.typeInfo.strategy}」配合「${hd.authority}」為主，再用紫微命宮${soulName}的特質與占星的元素偏好檢視取捨，三者一致時行動，不一致時多給自己一些時間。`;
+  const action = z
+    ? `日常決策建議：以人類圖的策略「${hd.typeInfo.strategy}」配合「${hd.authority}」為主，再用紫微命宮${soulName}的特質與占星的元素偏好檢視取捨，三者一致時行動，不一致時多給自己一些時間。`
+    : `日常決策建議：以人類圖的策略「${hd.typeInfo.strategy}」配合「${hd.authority}」為主，再用占星的元素偏好檢視取捨，兩者一致時行動，不一致時多給自己一些時間。`;
 
   const paragraphs = [
-    { title: '三家合看', text: intro },
+    { title: `${fam}合看`, text: intro },
     { title: '共同底色', text: `${consensusText}${soloText ? `\n${soloText}` : ''}` },
     { title: '內在拉扯與整合', text: tensionText },
     { title: '天賦與課題', text: `天賦：${strengths.join('；')}。\n課題：${lesson}` },
     { title: '落地建議', text: action },
-    { title: '使用須知', text: '本總論是把三套系統的象徵意涵歸納成十個通用主題後的整理，屬於「描述傾向」而非各系統的傳統斷語；主題很粗，不同人的盤很容易讀到相似的話，請以自身經驗檢驗、不要只因「說中了」就全盤採信。' },
+    { title: '使用須知', text: `本總論是把${n === 3 ? '三' : '兩'}套系統的象徵意涵歸納成十個通用主題後的整理，屬於「描述傾向」而非各系統的傳統斷語；主題很粗，不同人的盤很容易讀到相似的話，請以自身經驗檢驗、不要只因「說中了」就全盤採信。` },
   ];
 
+  const ev = { ...evidence };
+  if (!z) ev.ziwei = ['出生時間不詳，未排盤、不參與投票'];
   return {
     themes: consensus,
+    tensions,
+    systems: systems.map((s) => sys[s]),
+    systemCount: n,
     paragraphs,
-    evidence: Object.fromEntries(Object.entries(evidence).map(([k, v]) => [sys[k], v])),
+    evidence: Object.fromEntries(Object.entries(ev).map(([k, v]) => [sys[k], v])),
   };
 }
 

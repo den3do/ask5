@@ -7,7 +7,7 @@ import MbtiMatch from './MbtiMatch';
 import HelpButton from './HelpButton';
 import {
   getQuestions, interleave, scoreMbti, strengthLabel,
-  buildRecord, parseRecord, buildReportText,
+  buildRecord, checkRecord, buildReportText,
 } from '../utils/mbti';
 
 const LIKERT = [
@@ -127,7 +127,7 @@ function ResultView({ rec, onMatch }) {
 
       <div className="flex flex-wrap gap-2 font-sans">
         <button
-          onClick={() => onMatch(res.type, rec.name)}
+          onClick={() => onMatch()}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-bold"
         >
           <Users className="w-4 h-4" />和另一個人配對相處
@@ -174,10 +174,13 @@ export default function MbtiTest() {
   };
 
   const answer = (qid, v) => {
+    const firstTime = answers[qid] == null;
     setAnswers((a) => ({ ...a, [qid]: v }));
-    // 稍作停頓後自動下一題
+    // 只有第一次作答這題才稍作停頓後自動下一題;回頭修改已答的題目則停在原題
+    if (!firstTime) return;
+    const from = idx;
     setTimeout(() => {
-      setIdx((i) => (i < questions.length - 1 ? i + 1 : i));
+      setIdx((i) => (i === from && i < questions.length - 1 ? i + 1 : i));
     }, 180);
   };
 
@@ -190,9 +193,9 @@ export default function MbtiTest() {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    const rec = parseRecord(await f.text());
+    const { rec, error } = checkRecord(await f.text());
     if (!rec) {
-      setLoadMsg('這不是有效的 MBTI 存檔(.json),或檔案內容不完整。');
+      setLoadMsg(error);
       return;
     }
     setLoadMsg('');
@@ -221,7 +224,10 @@ export default function MbtiTest() {
       <HelpButton topic="mbti" label="MBTI 說明" />
       </div>
 
-      {view === 'match' && <MbtiMatch myType={current?.type || ''} myName={current && current.name !== '未命名' ? current.name : ''} />}
+      {/* 一直保持掛載、只切換顯示,切換分頁時配對頁的選擇不會遺失;「你」的類型由 current(已依作答重算)帶入 */}
+      <div hidden={view !== 'match'}>
+        <MbtiMatch myType={current?.type || ''} myName={current && current.name !== '未命名' ? current.name : ''} />
+      </div>
 
       {view === 'test' && (
       <div className="flex flex-wrap items-center justify-between gap-2">
