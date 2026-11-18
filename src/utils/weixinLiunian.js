@@ -9,22 +9,16 @@
  *   5. 生肖（農曆生年地支）與太歲的值、沖、刑、害、破（民俗犯太歲）
  * 分數只用來分級，對外呈現吉／小吉／平／小凶／凶與判斷依據。
  */
-import { TRIGRAMS, STEMS, BRANCHES, BRANCH_WUXING } from '../data/constants.js';
+import {
+  TRIGRAMS, STEMS, BRANCHES, BRANCH_WUXING, GEN, KE, CLASH, HE6, HAI, PO, SELF_XING, isXingPair, MU, ZODIAC,
+} from '../data/constants.js';
 import { getWuxingWangShuai, getRelation, buildDivinationBoard, evaluateDivination, detectSpecialPatterns } from './iching.js';
 import { findSunLongitudeTime } from './ephemeris.js';
 import { baziYearOf, calculatePillars } from './lunar.js';
 import { chineseClock } from './chineseTime.js';
 
-const GEN = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' };
-const KE = { 木: '土', 土: '水', 水: '火', 火: '金', 金: '木' };
-const CLASH = { 子: '午', 午: '子', 丑: '未', 未: '丑', 寅: '申', 申: '寅', 卯: '酉', 酉: '卯', 辰: '戌', 戌: '辰', 巳: '亥', 亥: '巳' };
-const HE6 = { 子: '丑', 丑: '子', 寅: '亥', 亥: '寅', 卯: '戌', 戌: '卯', 辰: '酉', 酉: '辰', 巳: '申', 申: '巳', 午: '未', 未: '午' };
-const HAI = { 子: '未', 未: '子', 丑: '午', 午: '丑', 寅: '巳', 巳: '寅', 卯: '辰', 辰: '卯', 申: '亥', 亥: '申', 酉: '戌', 戌: '酉' };
-const PO = { 子: '酉', 酉: '子', 午: '卯', 卯: '午', 巳: '申', 申: '巳', 寅: '亥', 亥: '寅', 辰: '丑', 丑: '辰', 戌: '未', 未: '戌' };
-const XING = [['子', '卯'], ['寅', '巳'], ['巳', '申'], ['寅', '申'], ['丑', '戌'], ['戌', '未'], ['丑', '未']];
-const SELF_XING = ['辰', '午', '酉', '亥'];
-const isXing = (a, b) => XING.some(([x, y]) => (x === a && y === b) || (x === b && y === a)) || (a === b && SELF_XING.includes(a));
-const ZODIAC = { 子: '鼠', 丑: '牛', 寅: '虎', 卯: '兔', 辰: '龍', 巳: '蛇', 午: '馬', 未: '羊', 申: '猴', 酉: '雞', 戌: '狗', 亥: '豬' };
+/** 相刑（含自刑） */
+const isXing = (a, b) => isXingPair(a, b) || (a === b && SELF_XING.includes(a));
 const LUNAR_MONTH = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '臘月'];
 
 export const LEVELS = ['凶', '小凶', '平', '小吉', '吉'];
@@ -199,7 +193,6 @@ export function buildWeixinLiunian({ lines, palace, upId, loId, year, gender = '
 
 // ───────── 立春卜流年卦（唯心宗作法：立春後另起一卦，看太歲與世爻） ─────────
 
-const MU = { 水: '辰', 土: '辰', 木: '未', 火: '戌', 金: '丑' }; // 五行入墓之地支（水土同墓於辰）
 const TAISUI_TONE = {
   妻財: { score: 1.5, text: '太歲為妻財：一年財源與實質收穫較多，基調偏吉' },
   子孫: { score: 1.5, text: '太歲為子孫：福神當值，可解憂、平安順心，基調偏吉' },

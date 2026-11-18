@@ -1,32 +1,14 @@
-import { TRIGRAMS, GONG_DATA, HEXAGRAM_DATA, STEMS, BRANCHES, BRANCH_WUXING, WUXING_RELATION, NAJIA_TABLE } from '../data/constants.js';
+import {
+  TRIGRAMS, GONG_DATA, HEXAGRAM_DATA, STEMS, BRANCHES, BRANCH_WUXING, WUXING_RELATION, NAJIA_TABLE,
+  CLASH, HE6, SELF_XING, isXingPair, SAN_HE, MU, JUE,
+} from '../data/constants.js';
 
-// --- 地支刑沖合害 判斷邏輯 ---
+// --- 地支刑沖合害 判斷邏輯（表格統一定義在 constants.js） ---
 export const checkBranchInteraction = (b1, b2) => {
-  // 六沖
-  const clashes = [['子','午'], ['丑','未'], ['寅','申'], ['卯','酉'], ['辰','戌'], ['巳','亥']];
-  for (let pair of clashes) {
-    if ((b1 === pair[0] && b2 === pair[1]) || (b1 === pair[1] && b2 === pair[0])) return '六沖';
-  }
-  
-  // 六合
-  const combines = [['子','丑'], ['寅','亥'], ['卯','戌'], ['辰','酉'], ['巳','申'], ['午','未']];
-  for (let pair of combines) {
-    if ((b1 === pair[0] && b2 === pair[1]) || (b1 === pair[1] && b2 === pair[0])) return '六合';
-  }
-
-  // 三刑
-  const punishments = [
-    { p: ['寅','巳'], type: '相刑' }, { p: ['巳','申'], type: '相刑' }, { p: ['申','寅'], type: '相刑' },
-    { p: ['丑','戌'], type: '相刑' }, { p: ['戌','未'], type: '相刑' }, { p: ['未','丑'], type: '相刑' },
-    { p: ['子','卯'], type: '無禮之刑' }
-  ];
-  for (let item of punishments) {
-    if ((b1 === item.p[0] && b2 === item.p[1]) || (b1 === item.p[1] && b2 === item.p[0])) return item.type;
-  }
-  
-  // 自刑
-  if (b1 === b2 && ['辰','午','酉','亥'].includes(b1)) return '自刑';
-
+  if (CLASH[b1] === b2) return '六沖';
+  if (HE6[b1] === b2) return '六合';
+  if (isXingPair(b1, b2)) return (b1 === '子' || b1 === '卯') && (b2 === '子' || b2 === '卯') ? '無禮之刑' : '相刑';
+  if (b1 === b2 && SELF_XING.includes(b1)) return '自刑';
   return null;
 };
 
@@ -371,12 +353,9 @@ export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
 };
 
 // ───────── 特殊卦象：六合／六沖卦、反吟／伏吟、三合局、暗動（《卜筮正宗》《增刪卜易》） ─────────
-const SIX_CLASH = { 子: '午', 午: '子', 丑: '未', 未: '丑', 寅: '申', 申: '寅', 卯: '酉', 酉: '卯', 辰: '戌', 戌: '辰', 巳: '亥', 亥: '巳' };
-const SIX_HE = { 子: '丑', 丑: '子', 寅: '亥', 亥: '寅', 卯: '戌', 戌: '卯', 辰: '酉', 酉: '辰', 巳: '申', 申: '巳', 午: '未', 未: '午' };
-const SAN_HE_JU = [
-  { b: ['申', '子', '辰'], wx: '水' }, { b: ['亥', '卯', '未'], wx: '木' },
-  { b: ['寅', '午', '戌'], wx: '火' }, { b: ['巳', '酉', '丑'], wx: '金' },
-];
+const SIX_CLASH = CLASH;
+const SIX_HE = HE6;
+const SAN_HE_JU = SAN_HE;
 // 卦反吟：後天八卦方位相沖的卦互變（乾巽、坎離、艮坤、震兌）
 const GUA_FANYIN = { 1: 5, 5: 1, 6: 3, 3: 6, 7: 0, 0: 7, 4: 2, 2: 4 };
 // 合散類主題：六合主成、六沖主散；憂患類主題相反
@@ -631,9 +610,8 @@ export const evaluateDivination = ({
   const yuanSupport = mvRole === '元神' && mvPowerful && !wuGen;
   const hasFu = daySupport || yuanSupport || selfBoost;
   const youQi = ysMonthStatus.score > 0 || hasFu; // 用神有氣
-  const tombJue = { 木: ['未', '申'], 火: ['戌', '亥'], 金: ['丑', '寅'], 水: ['辰', '巳'], 土: ['辰', '巳'] };
   const ysHua = ysIsMover && mvBack !== '剋'
-    ? (pillars.kongWang.includes(mv.changed.branch) ? '化空' : mv.changed.branch === tombJue[ys.wuxing][0] ? '化墓' : mv.changed.branch === tombJue[ys.wuxing][1] ? '化絕' : null)
+    ? (pillars.kongWang.includes(mv.changed.branch) ? '化空' : mv.changed.branch === MU[ys.wuxing] ? '化墓' : mv.changed.branch === JUE[ys.wuxing] ? '化絕' : null)
     : null;
 
   // (1) 用神月建旺衰（有助有扶則不作休囚論）

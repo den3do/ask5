@@ -9,12 +9,11 @@
  *   - 流年所在大運的吉凶 → 整體基調（運為十年大環境，年為當年氣候）
  * 不含神煞、流月、流日、小運，也不處理從格、化格。
  */
-import { analyzeBazi, STEM_HE } from './bazi.js';
+import { analyzeBazi } from './bazi.js';
 import { baziYearOf } from './lunar.js';
+import { STEM_HE, STEM_CLASH, CLASH as BRANCH_CLASH } from '../data/constants.js';
 
 const TONE_LABEL = { good: '助力', mid: '平', bad: '阻力' };
-const STEM_CLASH = { 甲: '庚', 庚: '甲', 乙: '辛', 辛: '乙', 丙: '壬', 壬: '丙', 丁: '癸', 癸: '丁' };
-const BRANCH_CLASH = { 子: '午', 午: '子', 丑: '未', 未: '丑', 寅: '申', 申: '寅', 卯: '酉', 酉: '卯', 辰: '戌', 戌: '辰', 巳: '亥', 亥: '巳' };
 
 /** 十神主題：title 為一句話標題，text 為白話說明 */
 const TEN_THEME = {

@@ -9,6 +9,7 @@ import { analyzeBazi, baziToText, compareBazi } from './bazi.js';
 import { generateCompatibilityReport } from './iching.js';
 import { resolveMoment } from './chineseTime.js';
 import { buildFusionSummary, fusionSummaryAsText } from './fusionSummary.js';
+import { GEN as WX_GEN, KE as WX_KE } from '../data/constants.js';
 
 export const DEFAULT_BIRTH = {
   name: '', gender: '男', year: '1995', month: '8', day: '15',
@@ -19,8 +20,6 @@ export const DEFAULT_BIRTH = {
 };
 
 // ───────────────────── 共用：五行與地支關係 ─────────────────────
-const WX_GEN = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' };
-const WX_KE = { 木: '土', 土: '水', 水: '火', 火: '金', 金: '木' };
 const ASTRO_TO_WX = { 火: '火', 土: '土', 風: '木', 水: '水' }; // 風象近巽木
 
 /** @returns {'生'|'被生'|'比和'|'剋'|'被剋'|null} 以 a 為主視角 */
