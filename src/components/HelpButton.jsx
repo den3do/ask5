@@ -11,6 +11,7 @@ const LOADERS = {
   hd: () => import('../data/help/hd.js'),
   astro: () => import('../data/help/astro.js'),
   fusion: () => import('../data/help/fusion.js'),
+  liunian: () => import('../data/help/liunian.js'),
   synastry: () => import('../data/help/synastry.js'),
   mbti: () => import('../data/help/mbti.js'),
 };

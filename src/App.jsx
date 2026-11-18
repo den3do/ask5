@@ -15,6 +15,7 @@ import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
 import NajiaTable from './components/NajiaTable';
 import HelpButton from './components/HelpButton';
+import SpecialPatterns from './components/SpecialPatterns';
 const PersonalHub = lazy(() => import('./components/PersonalHub'));
 const SynastryReport = lazy(() => import('./components/SynastryReport'));
 const MbtiTest = lazy(() => import('./components/MbtiTest'));
@@ -31,7 +32,12 @@ const GLOSSARY = [
   ['六親（妻財、官鬼、父母、子孫、兄弟）', '把事情分成五種角色：財、官與壓力、文書與長輩、子女與福氣、同儕與競爭者。'],
   ['六神', '青龍、朱雀、勾陳、螣蛇、白虎、玄武，是每一爻附帶的性格標籤，僅供參考。'],
   ['旬空（空亡）', '這一爻暫時「放空」使不上力，過一段時間出空後才有作用。'],
-  ['月破 / 日破', '這一爻被當月或當天的力量正面沖散，狀態比較差。'],
+  ['真空 / 假空', '假空＝旺相、動爻或得生扶的爻落空，只是暫緩，出空就有用；真空＝休囚無扶或月破又落空，真的使不上力。'],
+  ['月破 / 日破', '這一爻被當月或當天的力量正面沖散，狀態比較差（日破只算休囚的靜爻）。'],
+  ['暗動', '安靜的爻在當月旺相、又被當天沖到，會暗中發動，力量跟動爻一樣。'],
+  ['六合卦 / 六沖卦', '六爻兩兩相合＝事情聚合、易成也易拖；兩兩相沖＝事情易散，問憂愁官司反而是好事。'],
+  ['反吟 / 伏吟', '反吟＝反覆不定、成而復敗；伏吟＝停滯不前、拖延煎熬。'],
+  ['三合局', '三個地支（如申子辰）湊齊，合成一股大力量；缺一支時等補齊那天應驗。'],
   ['旺 / 相 / 休 / 囚 / 死', '這一爻在當月得到多少助力：旺最強、死最弱。'],
   ['回頭生 / 回頭剋', '動爻變化之後，是回過頭來幫助原本的爻（好），還是反過來傷害它（差）。'],
   ['進神 / 退神', '動爻變化後氣勢是在增強（進）還是衰退（退）。'],
@@ -578,6 +584,8 @@ ${linesStr}
                         )}
                       </div>
                     </div>
+
+                    <SpecialPatterns patterns={divResult.evaluation.patterns} />
 
                     {divResult.evaluation.notes?.length > 0 && (
                       <div className="bg-stone-100 border border-stone-200 rounded-lg p-4">

@@ -89,7 +89,7 @@ const parse = (gz) => (gz && gz.length === 2 && STEMS.includes(gz[0]) && BRANCHE
 
 /**
  * @param {Object} pillars  calculatePillars() 的結果
- * @param {Object} opts { gender:'男'|'女', utc:Date, nowYear?:number }
+ * @param {Object} opts { gender:'男'|'女', utc:Date, nowYear?:number, yearCount?:number（流年列幾年，預設 5） }
  */
 export function analyzeBazi(pillars, opts = {}) {
   const gender = opts.gender === '女' ? '女' : '男';
@@ -287,15 +287,19 @@ export function analyzeBazi(pillars, opts = {}) {
     if (diffDays < 1) notes.push('出生時刻距節令不到一天，起運歲數對出生時間極為敏感。');
   }
 
-  // 流年（今年起五年）：十神、與原局地支的沖合
+  // 流年（預設今年起五年；流年分頁另取十年）：十神、與原局地支的沖合
   const natalBranches = cols.filter((c) => c.gz).map((c) => ({ pos: c.pos, b: c.gz[1] }));
   const years = [];
-  for (let y = nowYear; y < nowYear + 5; y += 1) {
+  const yearCount = Math.max(1, opts.yearCount || 5);
+  for (let y = nowYear; y < nowYear + yearCount; y += 1) {
     const idx = (((y - 4) % 60) + 60) % 60;
     const stem = STEMS[idx % 10]; const branch = BRANCHES[idx % 12];
     const flags = branchInteractions(branch, natalBranches);
     years.push({
       year: y, gz: `${stem}${branch}`, stemTen: tenGod(dm, stem), branchTen: tenGod(dm, HIDDEN[branch][0]),
+      stemWx: STEM_WX[idx % 10], branchWx: BRANCH_WX[idx % 12],
+      // 天干（主上半年）與地支（主下半年）各自的喜忌傾向：+1 喜、−1 忌；地支依藏干加權
+      stemTone: wxTone(STEM_WX[idx % 10]), branchTone: Math.round(branchTone(branch) * 100) / 100,
       tone: adjust(toneOf(STEM_WX[idx % 10], branch), branch), flags,
     });
   }
@@ -312,7 +316,7 @@ export function analyzeBazi(pillars, opts = {}) {
   };
 }
 
-const STEM_HE = { 甲: '己', 己: '甲', 乙: '庚', 庚: '乙', 丙: '辛', 辛: '丙', 丁: '壬', 壬: '丁', 戊: '癸', 癸: '戊' };
+export const STEM_HE = { 甲: '己', 己: '甲', 乙: '庚', 庚: '乙', 丙: '辛', 辛: '丙', 丁: '壬', 壬: '丁', 戊: '癸', 癸: '戊' };
 
 /**
  * 八字合婚（傳統核心）：日干五合、日支（夫妻宮）合沖刑害破、年支（生肖）三合六合相沖、

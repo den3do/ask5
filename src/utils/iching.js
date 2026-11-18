@@ -270,7 +270,11 @@ export const buildNajiaBoard = ({ upId, loId, moving = null, pillars }) => {
 
     const isKongWang = pillars.kongWang.includes(branch);
     const isYuePo = branch === pillars.yuePoBranch;
-    const isRiPo = branch === pillars.riPoBranch && moving !== lineNum;
+    // 靜爻被日辰沖：月建休囚為「日破」（無力）；旺相則為「暗動」（暗中發動，有力）
+    const dayClashed = branch === pillars.riPoBranch && moving !== lineNum;
+    const monthStrong = getWuxingWangShuai(wuxing, pillars.monthBranch).score > 0 || branch === pillars.monthBranch;
+    const isRiPo = dayClashed && !monthStrong;
+    const isAnDong = dayClashed && monthStrong;
 
     let changedData = null;
     if (moving === lineNum) {
@@ -295,6 +299,7 @@ export const buildNajiaBoard = ({ upId, loId, moving = null, pillars }) => {
       isKongWang,
       isYuePo,
       isRiPo,
+      isAnDong,
       changed: changedData,
     });
   }
@@ -363,6 +368,149 @@ export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
   const toTrigramKey = (n) => ((n % 8) + 8) % 8; // 整除（坤 8）→ 0
   const moving = ((num3 % 6) + 6) % 6 || 6;
   return buildNajiaBoard({ upId: toTrigramKey(num1), loId: toTrigramKey(num2), moving, pillars });
+};
+
+// ───────── 特殊卦象：六合／六沖卦、反吟／伏吟、三合局、暗動（《卜筮正宗》《增刪卜易》） ─────────
+const SIX_CLASH = { 子: '午', 午: '子', 丑: '未', 未: '丑', 寅: '申', 申: '寅', 卯: '酉', 酉: '卯', 辰: '戌', 戌: '辰', 巳: '亥', 亥: '巳' };
+const SIX_HE = { 子: '丑', 丑: '子', 寅: '亥', 亥: '寅', 卯: '戌', 戌: '卯', 辰: '酉', 酉: '辰', 巳: '申', 申: '巳', 午: '未', 未: '午' };
+const SAN_HE_JU = [
+  { b: ['申', '子', '辰'], wx: '水' }, { b: ['亥', '卯', '未'], wx: '木' },
+  { b: ['寅', '午', '戌'], wx: '火' }, { b: ['巳', '酉', '丑'], wx: '金' },
+];
+// 卦反吟：後天八卦方位相沖的卦互變（乾巽、坎離、艮坤、震兌）
+const GUA_FANYIN = { 1: 5, 5: 1, 6: 3, 3: 6, 7: 0, 0: 7, 4: 2, 2: 4 };
+// 合散類主題：六合主成、六沖主散；憂患類主題相反
+const HE_GOOD_TOPICS = ['財運', '投資', '生意', '事業', '工作', '升遷', '感情', '婚姻', '合夥', '學業', '考運', '文書', '房子', '朋友', '同儕'];
+const CHONG_GOOD_TOPICS = ['官司', '健康', '醫藥', '解憂', '平安'];
+
+const trigramIdOfBits = (b1, b2, b3) => Number(Object.keys(TRIGRAMS).find((k) => TRIGRAMS[k].binary === `${b3}${b2}${b1}`));
+const branchesOf = (loId, upId) => [...NAJIA_TABLE[loId].inner, ...NAJIA_TABLE[upId].outer];
+const pairsAll = (br, table) => [0, 1, 2].every((i) => table[br[i]] === br[i + 3]);
+
+/**
+ * 偵測特殊卦象，並依所問主題給吉凶傾向與白話說明。
+ * @param {Object} p
+ * @param {Array}  p.linesData 本卦六爻（含 bit、branch、wuxing、isMoving、changed）
+ * @param {Object} p.pillars   起卦四柱（monthBranch、dayBranch）
+ * @param {string} p.topic     所問主題（決定六合／六沖對此事是吉是凶）
+ * @param {Object} [p.ys]      用神爻（{ wuxing, lineNum, isFu }），用來判斷三合局、暗動對用神的作用
+ * @returns {Array} [{ key, name, tone:'吉'|'凶'|'中', score, plain, how }]
+ */
+export const detectSpecialPatterns = ({ linesData, pillars, topic = '', ys = null }) => {
+  const out = [];
+  const bits = linesData.map((l) => l.bit);
+  const loId = trigramIdOfBits(bits[0], bits[1], bits[2]);
+  const upId = trigramIdOfBits(bits[3], bits[4], bits[5]);
+  const br = linesData.map((l) => l.branch);
+  const movers = linesData.filter((l) => l.isMoving && l.changed);
+  const nb = [...bits];
+  movers.forEach((m) => { nb[m.lineNum - 1] = bits[m.lineNum - 1] ? 0 : 1; });
+  const cLoId = trigramIdOfBits(nb[0], nb[1], nb[2]);
+  const cUpId = trigramIdOfBits(nb[3], nb[4], nb[5]);
+  const cbr = branchesOf(cLoId, cUpId);
+  const isHe = pairsAll(br, SIX_HE);
+  const isChong = pairsAll(br, SIX_CLASH);
+  const cHe = movers.length > 0 && pairsAll(cbr, SIX_HE);
+  const cChong = movers.length > 0 && pairsAll(cbr, SIX_CLASH);
+  const heGood = HE_GOOD_TOPICS.includes(topic);
+  const chongGood = CHONG_GOOD_TOPICS.includes(topic);
+  const how6 = '看法：把初爻和四爻、二爻和五爻、三爻和上爻的地支兩兩配對，三組都是六合（子丑、寅亥、卯戌、辰酉、巳申、午未）就是六合卦；三組都是六沖（子午、丑未、寅申、卯酉、辰戌、巳亥）就是六沖卦。';
+
+  // 1. 六合／六沖，以及動後的轉變
+  if (isHe && cChong) {
+    out.push({ key: 'he2chong', name: '合處逢沖（六合變六沖）', tone: heGood ? '凶' : chongGood ? '吉' : '中', score: heGood ? -3 : chongGood ? 2 : 0,
+      plain: '本卦六合、變卦六沖：一開始談得攏、看似會成，後來卻散掉。先成後敗、先合後離。', how: how6 });
+  } else if (isChong && cHe) {
+    out.push({ key: 'chong2he', name: '沖中逢合（六沖變六合）', tone: heGood ? '吉' : chongGood ? '凶' : '中', score: heGood ? 3 : chongGood ? -2 : 0,
+      plain: '本卦六沖、變卦六合：起初不順、像要散掉，後來轉成可成。先難後易、破鏡重圓。', how: how6 });
+  } else {
+    if (isHe) {
+      out.push({ key: 'liuhe', name: '六合卦', tone: heGood ? '吉' : chongGood ? '凶' : '中', score: heGood ? 3 : chongGood ? -3 : 0,
+        plain: heGood ? '六爻兩兩相合：事情容易談成、關係能長久。問求財、感情、合作、工作都是好兆頭。'
+          : chongGood ? '六爻兩兩相合：事情黏著不散。問官司、病痛、憂愁時反而不好，代表纏綿難解、拖得久。'
+            : '六爻兩兩相合：事情容易聚合、持續，結果好壞要看所問之事。', how: how6 });
+    }
+    if (isChong) {
+      out.push({ key: 'liuchong', name: '六沖卦', tone: chongGood ? '吉' : heGood ? '凶' : '中', score: chongGood ? 3 : heGood ? -3 : 0,
+        plain: chongGood ? '六爻兩兩相沖：事情會被沖散。問官司、病痛、憂愁時是好事，代表災難散去、問題解開。'
+          : heGood ? '六爻兩兩相沖：事情容易散掉、談不攏。問求財、感情、合作、考試時要小心，代表易散難成。'
+            : '六爻兩兩相沖：變動大、不安定，結果好壞要看所問之事。', how: how6 });
+    }
+    if (!isHe && !isChong && cHe) out.push({ key: 'bianhe', name: '變卦成六合', tone: '中', score: heGood ? 1 : 0, plain: '動後的變卦是六合：事情的後段有收攏、談定的趨勢。', how: how6 });
+    if (!isHe && !isChong && cChong) out.push({ key: 'bianchong', name: '變卦成六沖', tone: '中', score: heGood ? -1 : 0, plain: '動後的變卦是六沖：事情的後段容易起變化、散開。', how: how6 });
+  }
+
+  // 2. 反吟、伏吟（看動爻的變化）
+  if (movers.length) {
+    const lowerMoved = movers.some((m) => m.lineNum <= 3);
+    const upperMoved = movers.some((m) => m.lineNum >= 4);
+    const guaFan = (lowerMoved && GUA_FANYIN[loId] === cLoId) || (upperMoved && GUA_FANYIN[upId] === cUpId);
+    const yaoFan = movers.filter((m) => SIX_CLASH[m.branch] === m.changed.branch);
+    if (guaFan || yaoFan.length) {
+      const which = guaFan ? `${lowerMoved && GUA_FANYIN[loId] === cLoId ? `內卦${TRIGRAMS[loId].name}變${TRIGRAMS[cLoId].name}` : `外卦${TRIGRAMS[upId].name}變${TRIGRAMS[cUpId].name}`}（卦反吟）` : '';
+      const yao = yaoFan.map((m) => `${m.lineNum}爻${m.branch}化${m.changed.branch}`).join('、');
+      out.push({ key: 'fanyin', name: '反吟', tone: '凶', score: -2,
+        plain: `事情反覆不定、成了又壞、來回折騰，往往要跑兩趟、改兩次。${[which, yao && `${yao}（爻反吟）`].filter(Boolean).join('；')}。`,
+        how: '看法：卦反吟＝內卦或外卦變成方位正對面的卦（乾↔巽、坎↔離、艮↔坤、震↔兌）；爻反吟＝動爻化出的地支和自己相沖（例如子化午）。' });
+    }
+    const yaoFu = movers.filter((m) => m.branch === m.changed.branch);
+    const guaFu = (lowerMoved && ((loId === 1 && cLoId === 4) || (loId === 4 && cLoId === 1))) || (upperMoved && ((upId === 1 && cUpId === 4) || (upId === 4 && cUpId === 1)));
+    if (yaoFu.length || guaFu) {
+      out.push({ key: 'fuyin', name: '伏吟', tone: '凶', score: -2,
+        plain: '動了等於沒動：事情停滯不前、拖延煎熬，心裡憂悶，想變卻變不了。',
+        how: '看法：動爻化出的地支和原本完全相同（例如申化申），或乾、震互變（兩卦納甲地支一樣）。本站起卦只有一個動爻，伏吟很少出現。' });
+    }
+  }
+
+  // 3. 三合局：動爻為主，加上變爻、月建、日辰補齊
+  if (movers.length) {
+    const present = new Set([...movers.map((m) => m.branch), ...movers.map((m) => m.changed.branch), pillars.monthBranch, pillars.dayBranch]);
+    for (const ju of SAN_HE_JU) {
+      if (!movers.some((m) => ju.b.includes(m.branch))) continue; // 合局必須有動爻參與
+      // 只計動爻、變爻、月建、日辰；靜爻不參與成局
+      const have = ju.b.filter((b) => present.has(b));
+      const missing = ju.b.filter((b) => !have.includes(b));
+      if (have.length < 2) continue;
+      let effect = ''; let score = 0; let tone = '中';
+      if (ys) {
+        const r = WUXING_RELATION[ju.wx]?.[ys.wuxing];
+        if (ju.wx === ys.wuxing) { effect = '合成用神之局，用神力量大增'; score = 3; tone = '吉'; }
+        else if (r === '生') { effect = '合成生用神之局（元神局），助力很大'; score = 3; tone = '吉'; }
+        else if (r === '剋') { effect = '合成剋用神之局（忌神局），阻力很大'; score = -3; tone = '凶'; }
+        else effect = '合成之局與用神不相生剋，影響較小';
+      }
+      if (!missing.length) {
+        out.push({ key: 'sanhe', name: `三合${ju.wx}局`, tone, score,
+          plain: `${ju.b.join('')}三支湊齊，合成一股很大的${ju.wx}行力量，足以扭轉局面。${effect}。`,
+          how: '看法：申子辰合水、亥卯未合木、寅午戌合火、巳酉丑合金。要有動爻參與，再由它化出的變爻、當月月建、當天日辰湊齊三支（安靜的爻不算）。' });
+      } else if (missing.length === 1) {
+        out.push({ key: 'sanhe-wait', name: `三合${ju.wx}局（虛一待用）`, tone: '中', score: Math.round(score / 2),
+          plain: `${have.join('')}已在，還缺「${missing[0]}」。等到${missing[0]}年／月／日補齊時，局就成了，事情會在那時應驗。${effect ? `局成之後：${effect}。` : ''}`,
+          how: '看法：三合局缺一支稱「虛一待用」，逢補齊那一支的時間就是應期。' });
+      }
+    }
+  }
+
+  // 4. 暗動：靜爻旺相又被日辰沖 → 暗中發動；休囚被沖則為日破
+  const dayClash = SIX_CLASH[pillars.dayBranch];
+  linesData.filter((l) => !l.isMoving && l.branch === dayClash).forEach((l) => {
+    const strong = getWuxingWangShuai(l.wuxing, pillars.monthBranch).score > 0 || l.branch === pillars.monthBranch;
+    if (!strong) return; // 休囚被沖為日破，引擎另行處理
+    let role = ''; let score = 0; let tone = '中';
+    if (ys && !ys.isFu) {
+      if (l.lineNum === ys.lineNum) { role = '用神暗動：所問之事私下正在推進，會比預期快有消息'; score = 2; tone = '吉'; }
+      else if (WUXING_RELATION[l.wuxing]?.[ys.wuxing] === '生') { role = '元神暗動：有看不見的助力在幫忙'; score = 2; tone = '吉'; }
+      else if (WUXING_RELATION[l.wuxing]?.[ys.wuxing] === '剋') { role = '忌神暗動：有暗中的阻力或小人'; score = -2; tone = '凶'; }
+      else role = `它和用神（${ys.wuxing}）不相生剋，對所問之事影響不大，代表${l.relation}相關的人事在暗中有動靜`;
+    } else if (ys?.isFu) {
+      role = '用神伏藏，這一爻暗動代表相關人事在暗中有動靜';
+    }
+    out.push({ key: `andong-${l.lineNum}`, name: `暗動（第 ${l.lineNum} 爻${l.branch}${l.relation}）`, tone, score,
+      plain: `這一爻表面安靜，但它在本月旺相、又被今天的日辰${pillars.dayBranch}沖到，所以「暗中發動」，力量和動爻一樣。${role || '要看它和用神的關係判斷好壞'}。`,
+      how: '看法：靜爻＋月建旺相＋日辰六沖＝暗動（有力）；靜爻＋月建休囚＋日辰六沖＝日破（無力）。' });
+  });
+
+  return out;
 };
 
 /**
@@ -471,10 +619,12 @@ export const evaluateDivination = ({
   const ysLinRi = ys.branch === pillars.dayBranch;
   const isYsYuePo = ys.branch === pillars.yuePoBranch;
   // 旬空之用神逢日沖為「沖空」（出空而實），不另算日破
-  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving && !ys.isKongWang;
+  // 靜爻被日沖：休囚為「日破」；旺相則為「暗動」（有力，見特殊卦象），不算日破
+  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving && !ys.isKongWang && ysMonthStatus.score <= 0;
   const ysKong = effectiveKong(ys);
-  const daiWang = ysMonthStatus.score > 0 || ysDayRelation === '生' || ysLinRi; // 帶旺匪空
-  const trueKong = ysKong && !daiWang;
+  // 假空（帶旺匪空）：旺相、得日辰生扶或臨日、得動爻（元神）生；真空：休囚無扶，或月破又落空
+  const daiWang = ysMonthStatus.score > 0 || ysDayRelation === '生' || ysLinRi || mvRole === '元神';
+  const trueKong = ysKong && (!daiWang || isYsYuePo);
   const daySupport = ysDayRelation === '生' || ysDayRelation === '比和';
   const selfBoost = ysIsMover && mvBoost;
   const wuGen = (isYsYuePo || trueKong) && !(daySupport || selfBoost); // 用神無根
@@ -531,12 +681,12 @@ export const evaluateDivination = ({
   if (ys.isKongWang && !ysKong) {
     notes.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
   }
-  if (ysKong && daiWang) {
+  if (ysKong && !trueKong) {
     totalScore -= 1;
-    warnings.push(`用神逢旬空，但本身${ysMonthStatus.score > 0 ? '旺相' : '得日辰生扶'}，「帶旺匪空」（白話：只是眼下暫緩，不是真的落空），出旬或逢沖之日即可成事`);
+    warnings.push(`用神逢旬空，但本身${ysMonthStatus.score > 0 ? '旺相' : mvRole === '元神' ? '得動爻（元神）生扶' : '得日辰生扶'}，屬「假空」、「帶旺匪空」（白話：只是眼下暫緩，不是真的落空），出旬或逢沖之日即可成事`);
   } else if (trueKong) {
     totalScore -= 5;
-    warnings.push(`用神【落空亡】且休囚無扶（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
+    warnings.push(`用神【落空亡】且${isYsYuePo ? '又逢月破' : '休囚無扶'}，屬「真空」（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
   }
 
   // 世爻旬空
@@ -663,6 +813,16 @@ export const evaluateDivination = ({
     }
   }
 
+  // (4b) 特殊卦象：六合／六沖、反吟伏吟、三合局、暗動（依所問主題定吉凶）
+  const patterns = detectSpecialPatterns({ linesData, pillars, topic, ys: ysSubstitute ? null : ys });
+  for (const pt of patterns) {
+    totalScore += pt.score;
+    const line = `【${pt.name}】${pt.plain}`;
+    if (pt.score > 0) strengths.push(line);
+    else if (pt.score < 0) warnings.push(line);
+    else notes.push(line);
+  }
+
   // (5) 用神有氣無他故，所作皆成
   const hasGu = isYsYuePo || isYsRiPo || ysKong
     || (ysIsMover && (mvDrain || !!ysHua))
@@ -739,6 +899,7 @@ export const evaluateDivination = ({
     summary,
     mixed,
     fullCommentary,
+    patterns,
     yongShen: {
       name: yongShenInfo.name,
       relation: targetRelation,

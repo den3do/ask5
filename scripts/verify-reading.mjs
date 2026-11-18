@@ -11,6 +11,9 @@ import { computeDestiny } from '../src/utils/destiny.js';
 import { buildWeixinChart, weixinMingGua } from '../src/utils/weixin.js';
 import { computeFullProfile, DEFAULT_BIRTH } from '../src/utils/profile.js';
 import { parseBirthProfile, FILE_TAG } from '../src/utils/savedProfiles.js';
+import { buildLiunianReading, generateLiunianPrompt } from '../src/utils/liunian.js';
+import { buildWeixinLiunian, weixinLiunianText, defaultLiunianYear, levelOf, castLiunianGua } from '../src/utils/weixinLiunian.js';
+import { getRelation, detectSpecialPatterns } from '../src/utils/iching.js';
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log('✗ FAIL', m); } else console.log('✓', m); };
@@ -126,7 +129,11 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   const run = (kong) => evaluateDivination({ topic: '財運', pillars: { monthBranch: '卯', dayBranch: '申', yuePoBranch: '酉', riPoBranch: '寅', kongWang: kong, dayStem: '甲' }, linesData: mk(kong), movingLine: null, palaceWuxing: '金', originalHex: {}, changedHex: {}, nuclearHex: {}, gender: '男', palaceId: 1 });
   const chongKong = run(['寅', '卯']);
   ok(!chongKong.warnings.some((w) => w.includes('日破')) && chongKong.notes.some((n) => n.includes('沖空')), '旬空用神逢日沖 → 沖空，不另扣日破');
-  ok(run([]).warnings.some((w) => w.includes('日破')), '未旬空用神逢日沖 → 日破');
+  // 卯月寅木旺相被日沖 → 暗動（不是日破）；酉月寅木休囚被日沖 → 日破
+  const wang = run([]);
+  ok(!wang.warnings.some((w) => w.includes('日破')) && wang.strengths.some((s) => s.includes('用神暗動')), '未旬空用神旺相逢日沖 → 暗動，不算日破');
+  const xiu = evaluateDivination({ topic: '財運', pillars: { monthBranch: '酉', dayBranch: '申', yuePoBranch: '卯', riPoBranch: '寅', kongWang: [], dayStem: '甲' }, linesData: mk([]), movingLine: null, palaceWuxing: '金', originalHex: {}, changedHex: {}, nuclearHex: {}, gender: '男', palaceId: 1 });
+  ok(xiu.warnings.some((w) => w.includes('日破')), '未旬空用神休囚逢日沖 → 日破');
 }
 
 // 7b-3. 八字調候：已達 30% 不提前時，文字不得寫「已列為優先喜用」
@@ -216,6 +223,119 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   ok(r.ok && r.birth.cityIdx === 'custom' && r.birth.customLon === '104.06', '存檔讀回：自訂出生地保留 custom 與經緯度');
   const r2 = parseBirthProfile(JSON.stringify({ app: FILE_TAG, birth: { ...DEFAULT_BIRTH, cityIdx: '5' } }), DEFAULT_BIRTH);
   ok(r2.ok && r2.birth.cityIdx === 5, '存檔讀回：城市序號仍轉成數字');
+}
+
+// 13. 流年批命：十年、虛歲、立春換年、沖日支觸發夫妻宮提示、伏吟、降級說明、基調
+{
+  const now = d('2027-01-15T04:00:00Z'); // 立春前：仍屬 2026 丙午年
+  const prof = computeFullProfile({ ...DEFAULT_BIRTH, name: '流年', gender: '男' });
+  const r = buildLiunianReading(prof, { now });
+  ok(r.years.length === 10 && r.years[0].year === 2026 && r.years[0].current, `流年列十年且立春前仍從 2026 起（得 ${r.years[0].year}，${r.years.length} 年）`);
+  ok(r.years[0].age === 2026 - prof.destiny.lunar.year + 1, `虛歲以農曆年計（得 ${r.years[0].age}）`);
+  ok(r.years.every((y) => ['積極', '穩進', '平穩', '保守'].includes(y.posture) && y.reasons.length >= 2), '每年都有基調與判斷依據');
+  ok(r.bazi.yongshen.primary === prof.bazi.yongshen.primary, '流年分頁的用神與八字卡一致');
+  // 日支被沖 → 感情提示；以日柱反推一個沖日支的年份
+  const dayB = prof.bazi.pillars.find((p) => p.pos === '日柱').branch;
+  const clashY = r.years.find((y) => y.flags.some((f) => f.startsWith('沖日柱')));
+  if (clashY) ok(clashY.domains.love.some((t) => t.includes('沖日支')), `${clashY.year} 沖日支（${dayB}）時感情面有夫妻宮變動提示`);
+  // 伏吟：用十年後的大範圍找與日柱同干支的年份（60 年一輪）
+  const dayGz = `${prof.bazi.pillars[2].stem}${prof.bazi.pillars[2].branch}`;
+  const r60 = buildLiunianReading(prof, { now, yearCount: 60 });
+  const fy = r60.years.find((y) => y.gz === dayGz);
+  ok(fy && fy.specials.some((s) => s.startsWith('與日柱伏吟')), `${fy?.year} ${dayGz} 年判為日柱伏吟`);
+  // 助力因刑沖降為平時，判斷依據要說明
+  const downgraded = r60.years.find((y) => y.tone === 'mid' && y.reasons.some((t) => t.includes('降為「平」')));
+  const shouldDown = r60.years.find((y) => y.tone === 'mid' && y.flags.some((f) => /^(沖|刑|害|破|自刑)/.test(f)) && (r60.bazi.years.find((b) => b.year === y.year).stemTone + r60.bazi.years.find((b) => b.year === y.year).branchTone >= 0.6));
+  ok(!shouldDown || downgraded, '助力被刑沖降為平時，判斷依據寫出原因');
+  const prompt = generateLiunianPrompt(prof, r, 'X');
+  ok(prompt.includes('2026 丙午') && prompt.includes('今年詳批'), 'AI 流年提示詞含逐年資料與今年詳批');
+}
+
+// 14. 唯心宗流年・流月
+{
+  const prof = computeFullProfile({ ...DEFAULT_BIRTH, name: '同事' });
+  const w = weixinMingGua(prof.birth);
+  const ch = buildWeixinChart(prof.birth, w.upperId, w.lowerId, w.movingLine);
+  const shi = ch.lines.find((l) => l.isShi);
+  const r = buildWeixinLiunian({ lines: ch.lines, palace: ch.palace, upId: w.upperId, loId: w.lowerId, year: 2027, gender: '男', birthBranch: '亥' });
+  ok(r.gz === '丁未' && r.months.length === 12, `2027 為丁未年、列十二個月（得 ${r.gz}，${r.months.length}）`);
+  ok(r.months[0].gz === '壬寅' && r.months[11].gz === '癸丑', `丁年五虎遁：正月壬寅、臘月癸丑（得 ${r.months[0].gz}、${r.months[11].gz}）`);
+  const lc = new Date(r.months[0].from.getTime() + 8 * 3600000);
+  ok(lc.getUTCMonth() === 1 && lc.getUTCDate() === 4, `2027 立春在 2/4（台灣時間，得 ${lc.getUTCMonth() + 1}/${lc.getUTCDate()}）`);
+  ok(r.months.every((m, i) => i === 11 || m.to.getTime() === r.months[i + 1].from.getTime()), '十二個節氣月首尾相接');
+  ok(r.taisui.length === 0,'屬豬（亥）逢未年：不犯太歲');
+  const r2 = buildWeixinLiunian({ lines: ch.lines, palace: ch.palace, upId: w.upperId, loId: w.lowerId, year: 2031, gender: '男', birthBranch: '巳' });
+  ok(r2.gz === '辛亥' && r2.taisui.some((t) => t.includes('沖太歲')), '屬蛇（巳）逢亥年：沖太歲');
+  // 月建沖世爻 → 月破並扣分
+  const clashM = r.months.find((m) => ({ 子: '午', 午: '子', 丑: '未', 未: '丑', 寅: '申', 申: '寅', 卯: '酉', 酉: '卯', 辰: '戌', 戌: '辰', 巳: '亥', 亥: '巳' })[m.branch] === shi.branch);
+  ok(clashM && clashM.notes.some((n) => n.includes('月破')), `${clashM?.lunarName} 月建${clashM?.branch}沖世爻${shi.branch} → 月破`);
+  ok(levelOf(3) === '吉' && levelOf(1) === '小吉' && levelOf(0) === '平' && levelOf(-1) === '小凶' && levelOf(-3) === '凶', '分級門檻');
+  ok(defaultLiunianYear(d('2026-11-18T04:00:00Z')) === 2027 && defaultLiunianYear(d('2026-06-01T04:00:00Z')) === 2026, '過年前約百日預設看明年，其餘看今年');
+  const txt = weixinLiunianText('同事', '雷山小過', r);
+  ok(txt.includes('正月（壬寅') && txt.split('\n').length >= 14, '複製用文字含十二個月');
+}
+
+// 15. 立春卜流年卦
+{
+  const at = d('2027-02-10T02:00:00Z');
+  const r = castLiunianGua({ num1: 3, num2: 8, num3: 5, castAt: at, year: 2027 });
+  ok(r.board.originalHex.name === '火地晉' && r.board.moving === 5, `3、8、5 → 火地晉五爻動（得 ${r.board.originalHex.name}、${r.board.moving}）`);
+  ok(r.taisui.branch === '未' && r.taisui.relation === getRelation(r.palaceInfo.palaceWuxing, '土'), `太歲未土對卦宮 ${r.palaceInfo.palaceWuxing} 為 ${r.taisui.relation}`);
+  ok(r.warnings.length === 0 && r.months.length === 12 && r.targetName === '世爻', '立春後起卦無提醒、整體以世爻論、十二個月');
+  const early = castLiunianGua({ num1: 3, num2: 8, num3: 5, castAt: d('2026-11-18T02:00:00Z'), year: 2027 });
+  ok(early.warnings.some((w) => w.includes('尚未立春')), '立春前起卦有提醒');
+  // 世爻沖太歲 → 找一個世爻與流年地支相沖的組合，全年分數應明顯扣分
+  let found = null;
+  for (let a = 1; a <= 8 && !found; a++) for (let b = 1; b <= 8 && !found; b++) {
+    const x = castLiunianGua({ num1: a, num2: b, num3: 1, castAt: at, year: 2027 });
+    if (x.linesData.find((l) => l.isShi).branch === '丑') found = x;
+  }
+  ok(found && found.yearNotes.some((n) => n.includes('一年不順')), `世爻丑沖太歲未 → 提示一年不順（${found?.board.originalHex.name}）`);
+  const fin = castLiunianGua({ num1: 3, num2: 8, num3: 5, castAt: at, year: 2027, topic: '財運', gender: '男' });
+  ok(fin.evaluation && fin.targetName.startsWith('用神妻財'), `指定財運時以妻財為用神（${fin.targetName}，引擎 ${fin.evaluation.level}）`);
+}
+
+// 16. 特殊卦象：六合／六沖卦表、合處逢沖、反吟、暗動與日破、三合局、主題定吉凶
+{
+  const P = calculatePillars(2026, 11, 18, 6); // 亥月、申日（日沖寅）
+  const ids = [1, 2, 3, 4, 5, 6, 7, 0];
+  const he = []; const ch = [];
+  for (const u of ids) for (const l of ids) {
+    const b = buildNajiaBoard({ upId: u, loId: l, moving: null, pillars: P });
+    const ps = detectSpecialPatterns({ linesData: b.linesData, pillars: P, topic: '財運' });
+    if (ps.some((p) => p.key === 'liuhe')) he.push(b.originalHex.name);
+    if (ps.some((p) => p.key === 'liuchong')) ch.push(b.originalHex.name);
+  }
+  ok(he.length === 8 && ['天地否', '地天泰', '雷地豫', '地雷復', '水澤節', '澤水困', '火山旅', '山火賁'].every((n) => he.includes(n)), `六合卦八個（得 ${he.join('、')}）`);
+  ok(ch.length === 10 && ['乾為天', '坤為地', '天雷無妄', '雷天大壯'].every((n) => ch.includes(n)), `六沖卦十個（八純＋無妄、大壯；得 ${ch.length}）`);
+  // 同一個六沖卦：問財運凶、問官司吉
+  const qian = buildNajiaBoard({ upId: 1, loId: 1, moving: null, pillars: P });
+  const f = detectSpecialPatterns({ linesData: qian.linesData, pillars: P, topic: '財運' }).find((p) => p.key === 'liuchong');
+  const g = detectSpecialPatterns({ linesData: qian.linesData, pillars: P, topic: '官司' }).find((p) => p.key === 'liuchong');
+  ok(f.score < 0 && g.score > 0, '六沖卦：問財運扣分、問官司加分');
+  // 合處逢沖：找一個六合卦動一爻變六沖卦
+  let h2c = null;
+  for (const u of ids) for (const l of ids) for (let m = 1; m <= 6 && !h2c; m++) {
+    const b = buildNajiaBoard({ upId: u, loId: l, moving: m, pillars: P });
+    if (detectSpecialPatterns({ linesData: b.linesData, pillars: P, topic: '感情' }).some((p) => p.key === 'he2chong')) h2c = b;
+  }
+  ok(h2c && he.includes(h2c.originalHex.name) && ch.includes(h2c.changedHex.name), `合處逢沖：${h2c?.originalHex.name}→${h2c?.changedHex.name}`);
+  // 卦反吟：地天泰初爻動，內卦乾變巽
+  const tai = buildNajiaBoard({ upId: 0, loId: 1, moving: 1, pillars: P });
+  ok(detectSpecialPatterns({ linesData: tai.linesData, pillars: P }).some((p) => p.key === 'fanyin'), '地天泰初爻動：內卦乾變巽為卦反吟');
+  // 暗動 vs 日破：申日沖寅；亥月寅木為「相」→ 暗動、不算日破
+  const andongLine = tai.linesData.find((l) => l.branch === '寅' && !l.isMoving);
+  ok(andongLine && andongLine.isAnDong && !andongLine.isRiPo, '亥月申日：靜爻寅木旺相被沖 → 暗動，不是日破');
+  const P2 = calculatePillars(2026, 6, 10, 6); // 午月
+  const tai2 = buildNajiaBoard({ upId: 0, loId: 1, moving: null, pillars: P2 });
+  const sl = tai2.linesData.find((l) => l.branch === P2.riPoBranch);
+  if (sl) ok(sl.isRiPo === !(sl.isAnDong), `${P2.monthBranch}月${P2.dayBranch}日：被日沖的${sl.branch}${sl.wuxing}依旺衰分為${sl.isAnDong ? '暗動' : '日破'}`);
+  // 三合局（虛一待用）：動爻參與、只差一支
+  const wait = detectSpecialPatterns({ linesData: tai.linesData, pillars: P, topic: '財運', ys: tai.linesData[0] });
+  ok(wait.some((p) => p.key === 'sanhe-wait' && p.plain.includes('還缺')), '地天泰初爻子動＋申日：申子辰缺辰 → 虛一待用');
+  // 引擎整合：patterns 有回傳，且有分數者進入有利／不利清單
+  const e = evaluateDivination({ topic: '財運', pillars: P, linesData: qian.linesData, movingLine: null, palaceWuxing: qian.palaceInfo.palaceWuxing, originalHex: qian.originalHex, changedHex: qian.changedHex, nuclearHex: qian.nuclearHex, palaceId: qian.palaceInfo.palaceId });
+  ok(e.patterns.some((p) => p.key === 'liuchong') && e.warnings.some((w) => w.startsWith('【六沖卦】')), '一事一占：六沖卦問財運列入凶相警示');
 }
 
 console.log(fail ? `\n${fail} 項失敗` : '\n全部通過');

@@ -24,7 +24,7 @@ export const PERSONAS = [
 ];
 
 /** 各系統預設的角色 */
-export const DEFAULT_PERSONA = { iching: 'wudang', ziwei: 'diviner', astro: 'psych', hd: 'psych' };
+export const DEFAULT_PERSONA = { iching: 'wudang', ziwei: 'diviner', astro: 'psych', hd: 'psych', liunian: 'diviner' };
 
 const FUSION_SYSTEM = `你是精通紫微斗數、人類圖與西洋占星心理學的整合型解讀者。任務是把三套系統「融合」而非逐一羅列：找出多家共同指向的主題、說明彼此矛盾之處與整合方式，並用流暢、溫暖、白話的繁體中文重新組織成一篇有主軸的總論。聲明這些系統是自我探索的象徵工具，不是科學診斷；不恐嚇、不鐵口直斷吉凶、不對醫療投資法律作保證。`;
 

@@ -90,6 +90,9 @@ export default function NajiaTable({ lines, pillars, fuShen = [], yongShenRelati
                     {line.isYing && <Badge cls="bg-blue-600 shadow-sm">應</Badge>}
                     {line.isKongWang && <Badge cls="bg-amber-600">空</Badge>}
                     {line.isYuePo && <Badge cls="bg-purple-600">月破</Badge>}
+                    {/* 暗動、日破只對「起卦時間」有意義；命卦用出生四柱，不標 */}
+                    {timeLabel !== '出生四柱' && line.isAnDong && <Badge cls="bg-sky-600">暗動</Badge>}
+                    {timeLabel !== '出生四柱' && line.isRiPo && <Badge cls="bg-purple-400">日破</Badge>}
                     {isYongShen && <Badge cls="bg-indigo-600">用神</Badge>}
                     {fu && (
                       <div

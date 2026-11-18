@@ -11,6 +11,7 @@ const ZiweiPanel = lazy(() => import('./panels/ZiweiPanel'));
 const HdPanel = lazy(() => import('./panels/HdPanel'));
 const AstroPanel = lazy(() => import('./panels/AstroPanel'));
 const FusionPanel = lazy(() => import('./panels/FusionPanel'));
+const LiunianPanel = lazy(() => import('./panels/LiunianPanel'));
 
 const SUBTABS = [
   { id: 'iching', label: '易經命卦', emoji: '☯️', C: IchingPanel },
@@ -19,6 +20,7 @@ const SUBTABS = [
   { id: 'hd', label: '人類圖', emoji: '⬡', C: HdPanel },
   { id: 'astro', label: '西洋星座', emoji: '🪐', C: AstroPanel },
   { id: 'fusion', label: '融合', emoji: '🌐', C: FusionPanel },
+  { id: 'liunian', label: '流年', emoji: '📅', C: LiunianPanel },
 ];
 
 /** 個人命理：輸入一次生辰，分頁檢視四大系統與融合報告 */

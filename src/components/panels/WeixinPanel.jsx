@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Explainer, SectionTitle } from '../ui';
 import SmartReading from '../SmartReading';
 import NajiaTable from '../NajiaTable';
+import WeixinLiunian from '../WeixinLiunian';
 import { TRIGRAMS } from '../../data/constants';
 import { getHexData } from '../../utils/iching';
 import { weixinMingGua, buildWeixinChart } from '../../utils/weixin';
@@ -65,6 +66,7 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
   const [loId, setLoId] = useState(compL);
   // 重新排盤（profile 換新）時丟掉舊的手動指定，回到新命盤的自動排卦；
   // 在 render 中比對前一次的 profile 立即重設，避免先閃一次舊的上下卦
+  const [view, setView] = useState('ming'); // 子頁籤：ming＝命卦、liunian＝流年
   const [seenProfile, setSeenProfile] = useState(profile);
   if (seenProfile !== profile) {
     setSeenProfile(profile);
@@ -76,9 +78,61 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
   const up = TRIGRAMS[upId];
   const lo = TRIGRAMS[loId];
   const changed = upId !== compU || loId !== compL;
+  const chart = useMemo(() => buildWeixinChart(profile.birth, upId, loId, wx.movingLine), [profile.birth, upId, loId, wx.movingLine]);
+
+  const trigramPickers = (
+    <>
+      <TrigramSelect label="上卦（外）" value={upId} onChange={setUpId} />
+      <TrigramSelect label="下卦（內）" value={loId} onChange={setLoId} />
+      {changed && (
+        <button type="button" onClick={() => { setUpId(compU); setLoId(compL); }} className="flex items-center gap-1 text-xs text-amber-700 hover:underline">
+          <RotateCcw className="w-3 h-3" />還原為自動排卦（{computedName}）
+        </button>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-6">
+      <div role="tablist" aria-label="唯心宗" className="flex gap-1.5 font-sans">
+        {[['ming', '☯️ 命卦'], ['liunian', '📅 流年']].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={view === id}
+            onClick={() => setView(id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition ${
+              view === id ? 'bg-amber-600 text-white border-amber-700 shadow' : 'bg-white text-stone-600 border-stone-300 hover:border-stone-500'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'liunian' && (
+        <>
+          <div className="rounded-xl border border-stone-200 bg-white p-3 font-sans text-xs text-stone-700 flex flex-wrap items-center gap-3">
+            <span>
+              使用命卦：<strong className="text-stone-800 text-sm">{hex.name}</strong>
+              （{up.name}上{lo.name}下・{chart.palace.palaceName}宮{chart.palace.palaceWuxing}）
+            </span>
+            {trigramPickers}
+          </div>
+          <WeixinLiunian
+            profile={profile}
+            chart={chart}
+            upId={upId}
+            loId={loId}
+            hexName={hex.name}
+            systemPrompt={WEIXIN_SYSTEM}
+            onOpenSettings={onOpenSettings}
+          />
+        </>
+      )}
+
+      {view === 'ming' && (<>
       <Explainer title="什麼是「唯心宗命卦」？" accent="amber">
         <p>唯心宗（唯心聖教）傳承「鬼谷子心法與先天易經」，以出生年月日時推出一個本命卦，並重視「<b>內明外順</b>」：<b>下卦看內在本質，上卦看外在呈現</b>，再把卦象落實到生活與職場。</p>
         <p className="inline-block px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[11px] font-black">實驗性規則・未經官方確認</p>
@@ -86,7 +140,6 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
       </Explainer>
 
       {(() => {
-        const chart = buildWeixinChart(profile.birth, upId, loId, wx.movingLine);
         const changedHex = wx.movingLine ? chart.board.changedHex : null;
         return (
           <NajiaTable
@@ -100,17 +153,7 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
                 {changedHex && <>・{['初', '二', '三', '四', '五', '上'][wx.movingLine - 1]}爻動（依時辰）➔ 變卦 {changedHex.name}</>}
               </>
             )}
-            toolbar={(
-              <>
-                <TrigramSelect label="上卦（外）" value={upId} onChange={setUpId} />
-                <TrigramSelect label="下卦（內）" value={loId} onChange={setLoId} />
-                {changed && (
-                  <button type="button" onClick={() => { setUpId(compU); setLoId(compL); }} className="flex items-center gap-1 text-xs text-amber-700 hover:underline">
-                    <RotateCcw className="w-3 h-3" />還原為自動排卦（{computedName}）
-                  </button>
-                )}
-              </>
-            )}
+            toolbar={trigramPickers}
           />
         );
       })()}
@@ -143,6 +186,7 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
         systemPrompt={WEIXIN_SYSTEM}
         onOpenSettings={onOpenSettings}
       />
+      </>)}
     </div>
   );
 }
