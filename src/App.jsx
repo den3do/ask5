@@ -128,9 +128,14 @@ const DivinationApp = () => {
       palaceId: palaceInfo.palaceId,
     });
 
+    const ysInfo = evaluation.yongShen;
     const linesWithYongShen = linesData.map(l => ({
       ...l,
-      isYongShen: l.relation === evaluation.yongShen.relation
+      isYongShen: l.relation === ysInfo.relation,
+      // 用神不現時，伏神藏在同位飛神之下
+      fuShen: ysInfo.isFu && l.lineNum === ysInfo.lineNum
+        ? { relation: ysInfo.relation, branch: ysInfo.branch, wuxing: ysInfo.wuxing, isKongWang: ysInfo.isKongWang, isYuePo: ysInfo.isYuePo }
+        : null
     }));
 
     setDivResult({
@@ -163,6 +168,7 @@ const DivinationApp = () => {
       if (l.isKongWang) tags.push('【空】');
       if (l.isYuePo) tags.push('【月破】');
       if (l.isYongShen) tags.push('【用神】');
+      if (l.fuShen) tags.push(`（下伏 [${l.fuShen.relation}] ${l.fuShen.branch}${l.fuShen.wuxing}【伏神・用神】）`);
       const base = `第${l.lineNum}爻 ${l.bit === 1 ? '陽爻 ⚊' : '陰爻 ⚋'} 臨${l.beast} [${l.relation}] ${l.branch}${l.wuxing} ${tags.join('')}`;
       if (l.isMoving && l.changed) {
         return `${base} ➔ 動化: [${l.changed.relation}] ${l.changed.branch}${l.changed.wuxing} (${l.changed.interact}本爻 ${l.changed.specialInteract || ''})`;
@@ -580,6 +586,12 @@ ${linesStr}
                     <span className="font-bold text-stone-800 text-sm">六爻全景納甲排盤 (從上爻至初爻)</span>
                     <span className="text-xs text-stone-500">
                       用神：<strong className="text-indigo-600">{divResult.evaluation.yongShen.name}</strong> ({divResult.evaluation.yongShen.wuxing}・{divResult.evaluation.yongShen.status}氣)
+                      {divResult.evaluation.yongShen.isFu && (
+                        <span className="ml-1 text-indigo-600">・伏於第 {divResult.evaluation.yongShen.lineNum} 爻之下</span>
+                      )}
+                      {divResult.evaluation.yongShen.isSubstitute && (
+                        <span className="ml-1 text-rose-600">・不現無伏，以世爻代</span>
+                      )}
                     </span>
                   </div>
 
@@ -615,7 +627,7 @@ ${linesStr}
                             key={idx}
                             className={`hover:bg-stone-50 transition-colors ${
                               line.isMoving ? 'bg-amber-50/60' : ''
-                            } ${line.isYongShen ? 'bg-indigo-50/50' : ''}`}
+                            } ${line.isYongShen || line.fuShen ? 'bg-indigo-50/50' : ''}`}
                           >
                             <td className="py-2.5 px-3 font-medium text-xs text-stone-600">
                               {line.beast}
@@ -637,6 +649,23 @@ ${linesStr}
                               )}
                               {line.isYongShen && (
                                 <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-indigo-600 text-white">用神</span>
+                              )}
+                              {line.fuShen && (
+                                <div
+                                  className="mt-1.5 flex items-center gap-1 text-xs text-indigo-700"
+                                  title="用神不現於卦中，取本宮八純卦同位之爻為伏神，藏在這一爻（飛神）之下"
+                                >
+                                  <span className="px-1 py-0.5 rounded border border-dashed border-indigo-400 text-[10px] font-black">伏</span>
+                                  <span className="font-bold">{line.fuShen.relation}</span>
+                                  <span className="font-mono font-bold">{line.fuShen.branch}{line.fuShen.wuxing}</span>
+                                  {line.fuShen.isKongWang && (
+                                    <span className="px-1 py-0.5 rounded text-[10px] font-black bg-amber-600 text-white">空</span>
+                                  )}
+                                  {line.fuShen.isYuePo && (
+                                    <span className="px-1 py-0.5 rounded text-[10px] font-black bg-purple-600 text-white">月破</span>
+                                  )}
+                                  <span className="px-1 py-0.5 rounded text-[10px] font-black bg-indigo-600 text-white">用神</span>
+                                </div>
                               )}
                             </td>
 

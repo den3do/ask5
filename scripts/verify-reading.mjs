@@ -81,6 +81,38 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   ok(ev.warnings?.some((w) => w.includes('伏神')), '用神（妻財）不現 → 取伏神並說明');
 }
 
+// 7b. 六爻用神加成（《黃金策》《增刪卜易》）：乾宮，財運用神為第 2 爻寅木，世在六爻戌土
+{
+  const BR = ['子', '寅', '辰', '午', '申', '戌'];
+  const WX = { 子: '水', 寅: '木', 辰: '土', 午: '火', 申: '金', 戌: '土' };
+  const REL = { 子: '子孫', 寅: '妻財', 辰: '父母', 午: '官鬼', 申: '兄弟', 戌: '父母' };
+  const mk = (kongWang, moving = null) => BR.map((b, i) => ({
+    lineNum: i + 1, branch: b, wuxing: WX[b], relation: REL[b], beast: '青龍', isShi: i === 5, isYing: i === 2,
+    isMoving: moving?.line === i + 1, isKongWang: kongWang.includes(b), isYuePo: false, bit: 1,
+    changed: moving?.line === i + 1 ? moving.changed : null,
+  }));
+  const P = (monthBranch, dayBranch, yuePoBranch, riPoBranch, kongWang = []) => ({ monthBranch, dayBranch, yuePoBranch, riPoBranch, kongWang, dayStem: '甲' });
+  const run = (pillars, lines) => evaluateDivination({ topic: '財運', pillars, linesData: lines, movingLine: null, palaceWuxing: '金', originalHex: {}, changedHex: {}, nuclearHex: {}, gender: '男', palaceId: 1 });
+
+  const clean = run(P('卯', '子', '酉', '午'), mk([]));
+  ok(clean.strengths.some((s) => s.includes('用神有氣無他故')), '用神旺相、日生、無破空 → 「用神有氣無他故」加成');
+
+  const kong = run(P('卯', '午', '酉', '子', ['寅', '卯']), mk(['寅', '卯']));
+  ok(kong.warnings.some((w) => w.includes('帶旺匪空')) && !kong.warnings.some((w) => w.includes('落空亡')), '旺相用神逢空 → 帶旺匪空，不作真空扣分');
+
+  const fu = run(P('酉', '子', '卯', '午'), mk([]));
+  ok(fu.strengths.some((s) => s.includes('有助有扶')), '用神月令囚但日辰生 → 「有助有扶」不作休囚論');
+
+  // 忌神申金（剋寅木）休囚發動、化回頭剋：剋之無力且剋力自減，不應被當成凶
+  const ji = run(P('卯', '午', '酉', '子'), mk([], { line: 5, changed: { branch: '午', wuxing: '火' } }));
+  ok(ji.warnings.some((w) => w.includes('剋之無力')) && ji.strengths.some((s) => s.includes('剋力自減')), '忌神休囚動化回頭剋 → 剋之無力、剋力自減');
+
+  // 忌神旺相發動化回頭生 → 剋力更盛，分數低於無動爻時
+  const jiStrong = run(P('酉', '午', '卯', '子'), mk([], { line: 5, changed: { branch: '未', wuxing: '土' } }));
+  const noMove = run(P('酉', '午', '卯', '子'), mk([]));
+  ok(jiStrong.warnings.some((w) => w.includes('剋力更盛')) && jiStrong.score < noMove.score, `忌神旺動化回頭生 → 剋力更盛（${jiStrong.score} < ${noMove.score}）`);
+}
+
 // 8. 八字合婚
 {
   const A = { dayStem: '甲', dayBranch: '子', yearBranch: '子' };

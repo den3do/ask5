@@ -372,6 +372,7 @@ export const evaluateDivination = ({
 
   const candidates = linesData.filter(l => l.relation === targetRelation);
   let yongShenLine;
+  let ysSubstitute = false; // 用神不現且無伏神，以世爻代用
   if (candidates.length === 1) {
     yongShenLine = candidates[0];
   } else if (candidates.length > 1) {
@@ -398,54 +399,105 @@ export const evaluateDivination = ({
       else if (f === '剋') { totalScore -= 2; warnings.push('飛神剋伏神，伏藏之用神受制難出'); }
     } else {
       yongShenLine = shiLine;
+      ysSubstitute = true;
       warnings.push(`卦中【${yongShenInfo.name}】不現且本宮亦無伏神可查，此處僅以世爻代為論斷，屬降級判斷，可信度明顯降低。`);
     }
   }
 
-  // (1) 用神月建旺衰
-  const ysMonthStatus = getWuxingWangShuai(yongShenLine.wuxing, pillars.monthBranch);
-  totalScore += ysMonthStatus.score;
+  // ===== 用神為一卦之主：先判用神有氣與否，再論元神、忌神 =====
+  // 依據：《黃金策・總斷千金賦》「用神有氣無他故，所作皆成」「有助有扶，衰弱休囚亦吉」
+  //       「帶旺匪空」「日辰為六爻之主宰」「用化用，有用無用」「用爻變動，忌遭死墓空絕」
+  //       《增刪卜易・元神忌神衰旺章》元神須旺相方能生用神、忌神休囚動亦不能剋用神、
+  //       「用神無根，元神有力亦難生」
+  const ys = yongShenLine;
+  const dayWuxing = BRANCH_WUXING[pillars.dayBranch];
+  const lineHasQi = (l) => getWuxingWangShuai(l.wuxing, pillars.monthBranch).score > 0
+    || ['生', '比和'].includes(WUXING_RELATION[dayWuxing][l.wuxing]);
+
+  // 動爻分析：依其與用神的關係定角色（用神本身／元神／忌神／其他）
+  const mv = movingLineData && movingLineData.changed ? movingLineData : null;
+  const mvBack = mv ? WUXING_RELATION[mv.changed.wuxing][mv.wuxing] : null; // 變爻對本爻
+  const mvAdv = mv ? checkAdvanceOrRetreat(mv.branch, mv.changed.branch) : null;
+  const mvBoost = mvBack === '生' || (mvAdv?.score ?? 0) > 0;
+  const mvDrain = mvBack === '剋' || (mvAdv?.score ?? 0) < 0;
+  const ysIsMover = !!(mv && !ys.isFu && ys.lineNum === mv.lineNum);
+  const mvToYs = mv && !ysIsMover ? WUXING_RELATION[mv.wuxing][ys.wuxing] : null;
+  const mvRole = ysIsMover ? '用神' : mvToYs === '生' ? '元神' : mvToYs === '剋' ? '忌神' : null;
+  // 動爻本身有力：旺相或得日辰生扶、且非月破；或動化回頭生／進神
+  const mvPowerful = mv ? ((lineHasQi(mv) && mv.branch !== pillars.yuePoBranch) || mvBoost) : false;
+  const mvLabel = mv ? `第 ${mv.lineNum} 爻${mv.branch}${mv.wuxing}` : '';
+
+  // 用神本身狀態
+  const ysMonthStatus = getWuxingWangShuai(ys.wuxing, pillars.monthBranch);
+  const ysDayRelation = WUXING_RELATION[dayWuxing][ys.wuxing]; // 日辰對用神
+  const ysLinRi = ys.branch === pillars.dayBranch;
+  const isYsYuePo = ys.branch === pillars.yuePoBranch;
+  const isYsRiPo = ys.branch === pillars.riPoBranch && !ys.isMoving;
+  const ysKong = effectiveKong(ys);
+  const daiWang = ysMonthStatus.score > 0 || ysDayRelation === '生' || ysLinRi; // 帶旺匪空
+  const trueKong = ysKong && !daiWang;
+  const daySupport = ysDayRelation === '生' || ysDayRelation === '比和';
+  const selfBoost = ysIsMover && mvBoost;
+  const wuGen = (isYsYuePo || trueKong) && !(daySupport || selfBoost); // 用神無根
+  const yuanSupport = mvRole === '元神' && mvPowerful && !wuGen;
+  const hasFu = daySupport || yuanSupport || selfBoost;
+  const youQi = ysMonthStatus.score > 0 || hasFu; // 用神有氣
+  const tombJue = { 木: ['未', '申'], 火: ['戌', '亥'], 金: ['丑', '寅'], 水: ['辰', '巳'], 土: ['辰', '巳'] };
+  const ysHua = ysIsMover && mvBack !== '剋'
+    ? (pillars.kongWang.includes(mv.changed.branch) ? '化空' : mv.changed.branch === tombJue[ys.wuxing][0] ? '化墓' : mv.changed.branch === tombJue[ys.wuxing][1] ? '化絕' : null)
+    : null;
+
+  // (1) 用神月建旺衰（有助有扶則不作休囚論）
   if (ysMonthStatus.score > 0) {
+    totalScore += ysMonthStatus.score;
     strengths.push(`用神【${yongShenInfo.name}】得月令(${pillars.monthBranch}月)${ysMonthStatus.status}氣，天時相挺，根基厚實`);
   } else if (ysMonthStatus.score < 0) {
-    warnings.push(`用神【${yongShenInfo.name}】逢月令${ysMonthStatus.status}氣，外在環境施展受限`);
+    if (hasFu) {
+      const src = [daySupport && '日辰', yuanSupport && '元神發動', selfBoost && '自身動化回頭生／進神'].filter(Boolean).join('、');
+      strengths.push(`用神【${yongShenInfo.name}】雖逢月令${ysMonthStatus.status}氣，但得${src}生扶，「有助有扶，衰弱休囚亦吉」，不作休囚論`);
+    } else {
+      totalScore += ysMonthStatus.score;
+      warnings.push(`用神【${yongShenInfo.name}】逢月令${ysMonthStatus.status}氣，又無日辰、元神生扶，外在環境施展受限`);
+    }
   }
 
-  // (2) 用神日辰生剋與破散
-  const dayBranchWuxing = BRANCH_WUXING[pillars.dayBranch];
-  const ysDayRelation = WUXING_RELATION[dayBranchWuxing][yongShenLine.wuxing]; // 日建對用神
-  if (ysDayRelation === '生') {
-    totalScore += 2;
-    strengths.push(`用神得日辰(${pillars.dayBranch})暗中相生，有暗中貴人相助`);
+  // (2) 用神與日辰（日辰為六爻之主宰，權重不低於月建）
+  if (ysLinRi) {
+    totalScore += 3;
+    strengths.push(`用神臨日辰(${pillars.dayBranch})，日辰為六爻之主宰，得其臨扶，力量極強`);
+  } else if (ysDayRelation === '生') {
+    totalScore += 3;
+    strengths.push(`用神得日辰(${pillars.dayBranch})相生，日辰為六爻之主宰，有暗中貴人相助`);
   } else if (ysDayRelation === '剋') {
-    totalScore += -2;
-    warnings.push(`用神遭日辰(${pillars.dayBranch})暗剋，行事容易受到突發性阻力`);
+    totalScore -= 3;
+    warnings.push(`用神遭日辰(${pillars.dayBranch})相剋，日辰為六爻之主宰，行事容易受到突發性阻力`);
   } else if (ysDayRelation === '比和') {
     totalScore += 1;
     strengths.push(`用神與日辰同氣比和，辦事有力`);
   }
 
   // 月破判定
-  const isYsYuePo = yongShenLine.branch === pillars.yuePoBranch;
   if (isYsYuePo) {
     totalScore -= 6;
     warnings.push(`用神逢【月破】（白話：這一爻被當月的力量正面沖散），猶如枯木逢暴風，目前處於最被動虛弱之時`);
   }
 
   // 日破判定
-  const isYsRiPo = yongShenLine.branch === pillars.riPoBranch && !yongShenLine.isMoving;
   if (isYsRiPo) {
     totalScore -= 3;
     warnings.push(`用神安靜受日沖為【日破】（白話：這一爻被當天的力量沖到），主心浮氣躁或事有破敗`);
   }
 
-  // 旬空判定
-  if (yongShenLine.isKongWang && !effectiveKong(yongShenLine)) {
-    warnings.push(`用神雖逢旬空，但${yongShenLine.isMoving ? '動爻不作空論' : yongShenLine.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
+  // 旬空判定（旺相或得日生者為「帶旺匪空」，只是暫緩）
+  if (ys.isKongWang && !ysKong) {
+    warnings.push(`用神雖逢旬空，但${ys.isMoving ? '動爻不作空論' : ys.branch === pillars.monthBranch ? '月建所臨不作空論' : '日辰沖之為「沖空」，出空而實'}，不扣分。`);
   }
-  if (effectiveKong(yongShenLine)) {
+  if (ysKong && daiWang) {
+    totalScore -= 1;
+    warnings.push(`用神逢旬空，但本身${ysMonthStatus.score > 0 ? '旺相' : '得日辰生扶'}，「帶旺匪空」（白話：只是眼下暫緩，不是真的落空），出旬或逢沖之日即可成事`);
+  } else if (trueKong) {
     totalScore -= 5;
-    warnings.push(`用神【落空亡】（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
+    warnings.push(`用神【落空亡】且休囚無扶（白話：這一爻暫時「放空」使不上力，過一段時間出空才有作用），代表你所追求的事情目前尚未落實，暫時如捕風捉影`);
   }
 
   // 世爻旬空
@@ -462,7 +514,7 @@ export const evaluateDivination = ({
   const ysToShiRelation = WUXING_RELATION[yongShenLine.wuxing][shiLine.wuxing]; // 用神對世爻
   if (shiLine.relation === targetRelation) {
     totalScore += 5;
-    const yongWeak = yongShenLine.isKongWang || isYsYuePo || ysMonthStatus.score < 0;
+    const yongWeak = trueKong || isYsYuePo || !youQi;
     strengths.push(yongWeak
       ? `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），主動權在你手上；但這一爻本身力量不足（見不利之處），需等時機補強`
       : `【${yongShenInfo.name}持世】（白話：你所求的東西就坐在「自己」的位置），求事在己，主動權在你手上，是有利的格局`);
@@ -490,57 +542,95 @@ export const evaluateDivination = ({
     warnings.push(`應爻剋世爻，外在人際或對手態度防備，需防背刺或合作破局`);
   }
 
-  // (4) 動爻與動變反饋 (關鍵重頭戲)
-  if (movingLineData && movingLineData.changed) {
-    const cData = movingLineData.changed;
-    const origBranch = movingLineData.branch;
-    const chgBranch = cData.branch;
-    const origWuxing = movingLineData.wuxing;
-    const chgWuxing = cData.wuxing;
+  // (4) 動爻：依角色論吉凶（回頭生剋、進退只對用神、元神、忌神、世爻本身有意義）
+  if (mv) {
+    const c = mv.changed;
+    const huaDesc = `${mv.branch}${mv.wuxing}化${c.branch}${c.wuxing}`;
 
-    // 回頭生 / 回頭剋
-    const backRelation = WUXING_RELATION[chgWuxing][origWuxing];
-    if (backRelation === '生') {
-      totalScore += 5;
-      strengths.push(`動爻發動【化回頭生】(${chgBranch}${chgWuxing}生${origBranch}${origWuxing})，後勁無窮，越往後發展越好！`);
-    } else if (backRelation === '剋') {
-      totalScore -= 6;
-      warnings.push(`動爻發動遭【化回頭剋】(${chgBranch}${chgWuxing}剋${origBranch}${origWuxing})，先成後敗，過程需嚴防反撲與破壞！`);
+    if (mvRole === '用神') {
+      // 用神自身發動：用化用，有用無用
+      if (mvBack === '生') {
+        totalScore += 5;
+        strengths.push(`用神發動【化回頭生】(${huaDesc})，後勁無窮，越往後發展越好`);
+      } else if (mvBack === '剋') {
+        totalScore -= 6;
+        warnings.push(`用神發動遭【化回頭剋】(${huaDesc})，先成後敗，過程需嚴防反撲與破壞`);
+      }
+      if (mvAdv) {
+        totalScore += mvAdv.score;
+        (mvAdv.score > 0 ? strengths : warnings).push(`用神動而【${mvAdv.type}】(${huaDesc})，「用化用，有用無用」，${mvAdv.desc}`);
+      }
+      if (ysHua) {
+        totalScore -= 3;
+        warnings.push(`用神動而【${ysHua}】(${huaDesc})，「用爻變動，忌遭死墓空絕」，變化之後力量消散，容易竹籃打水一場空`);
+      }
+    } else if (mvRole === '元神') {
+      // 元神須旺相方能生用神；用神無根則元神有力亦難生
+      if (wuGen) {
+        warnings.push(`元神${mvLabel}發動生用神，但用神月破或真空、又無日辰扶持，「用神無根，元神有力亦難生」，不計加分`);
+      } else if (mvPowerful) {
+        totalScore += 4;
+        strengths.push(`元神${mvLabel}${mvBoost ? `動化${mvBack === '生' ? '回頭生' : '進神'}` : '旺相有力'}，發動生用神，所求之事得源源生助`);
+      } else {
+        totalScore += 1;
+        strengths.push(`元神${mvLabel}發動生用神，但元神本身休囚無氣，生之無力，助益有限`);
+      }
+    } else if (mvRole === '忌神') {
+      // 忌神旺相方能剋用神；休囚之忌神動亦不足為患
+      if (mvPowerful) {
+        totalScore -= 5;
+        warnings.push(`忌神${mvLabel}旺相有力，發動剋用神，所求之事受到實質阻害`);
+      } else {
+        totalScore -= 1;
+        warnings.push(`忌神${mvLabel}發動剋用神，但忌神休囚無氣，剋之無力，阻力有限`);
+      }
+      if (mvBoost) {
+        totalScore -= 2;
+        warnings.push(`忌神動化${mvBack === '生' ? '回頭生' : '進神'}(${huaDesc})，剋力更盛`);
+      }
+      if (mvDrain) {
+        totalScore += 2;
+        strengths.push(`忌神動化${mvBack === '剋' ? '回頭剋' : '退神'}(${huaDesc})，剋力自減`);
+      }
     }
 
-    // 進神 / 退神
-    const advRet = checkAdvanceOrRetreat(origBranch, chgBranch);
-    if (advRet) {
-      totalScore += advRet.score;
-      if (advRet.score > 0) strengths.push(`動爻【${advRet.type}】，${advRet.desc}`);
-      else warnings.push(`動爻【${advRet.type}】，${advRet.desc}`);
+    // 世爻（代表自己）發動而非用神：看自身動變
+    if (mv.isShi && mvRole !== '用神') {
+      if (mvBack === '生') {
+        totalScore += 2;
+        strengths.push(`世爻發動化回頭生(${huaDesc})，自身後勁漸足`);
+      } else if (mvBack === '剋') {
+        totalScore -= 3;
+        warnings.push(`世爻發動化回頭剋(${huaDesc})，自身反受其累`);
+      }
+      if (mvAdv) {
+        totalScore += mvAdv.score > 0 ? 2 : -2;
+        (mvAdv.score > 0 ? strengths : warnings).push(`世爻動而【${mvAdv.type}】，${mvAdv.desc}`);
+      }
+      if (pillars.kongWang.includes(c.branch)) {
+        totalScore -= 2;
+        warnings.push(`世爻動化空亡，自身心力虛散、有心無力`);
+      }
     }
 
-    // 動化空亡
-    if (pillars.kongWang.includes(chgBranch)) {
-      totalScore -= 3;
-      warnings.push(`動爻【化入空亡】，代表變化之後力量消散，容易竹籃打水一場空`);
-    }
-
-    // 動爻對世爻/用神之作用
-    const movToShi = WUXING_RELATION[origWuxing][shiLine.wuxing];
-    const movToYs = WUXING_RELATION[origWuxing][yongShenLine.wuxing];
-
-    if (movToShi === '生' && !movingLineData.isShi) {
+    // 動爻對世爻之作用
+    const movToShi = WUXING_RELATION[mv.wuxing][shiLine.wuxing];
+    if (movToShi === '生' && !mv.isShi) {
       totalScore += 3;
       strengths.push(`動爻生扶世爻，事態發展過程中會出現意料之外的助力`);
-    } else if (movToShi === '剋' && !movingLineData.isShi) {
+    } else if (movToShi === '剋' && !mv.isShi) {
       totalScore -= 4;
       warnings.push(`動爻剋傷世爻，中途容易殺出程咬金，令你措手不及`);
     }
+  }
 
-    if (movToYs === '生' && yongShenLine !== movingLineData) {
-      totalScore += 3;
-      strengths.push(`動爻生扶用神，核心目標得到催化生發，推進有望`);
-    } else if (movToYs === '剋' && yongShenLine !== movingLineData) {
-      totalScore -= 4;
-      warnings.push(`動爻剋害用神，求事核心受到波及干擾，需留意細節漏洞`);
-    }
+  // (5) 用神有氣無他故，所作皆成
+  const hasGu = isYsYuePo || isYsRiPo || ysKong
+    || (ysIsMover && (mvDrain || !!ysHua))
+    || (mvRole === '忌神' && mvPowerful);
+  if (youQi && !ys.isFu && !ysSubstitute && !hasGu) {
+    totalScore += 4;
+    strengths.push(`【用神有氣無他故，所作皆成】：用神${ysMonthStatus.score > 0 ? '旺相' : '得生扶'}，又無破、空、剋害，全卦主軸穩固，所求之事根基紮實`);
   }
 
   // 映射 7 個等級
@@ -614,7 +704,12 @@ export const evaluateDivination = ({
       lineNum: yongShenLine.lineNum,
       branch: yongShenLine.branch,
       wuxing: yongShenLine.wuxing,
-      status: ysMonthStatus.status
+      status: ysMonthStatus.status,
+      youQi,
+      isFu: !!yongShenLine.isFu,
+      isSubstitute: ysSubstitute,
+      isKongWang: !!yongShenLine.isKongWang,
+      isYuePo: isYsYuePo
     }
   };
 };
