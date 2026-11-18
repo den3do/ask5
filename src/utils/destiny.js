@@ -1,11 +1,8 @@
 /**
  * 易經終身命卦運算（自 App.jsx 抽出，供個人終身卦與全維報告共用）
  */
-import { TRIGRAMS, BRANCH_WUXING, NAJIA_TABLE, BRANCHES } from '../data/constants.js';
-import {
-  getRelation, getSixBeasts, findPalaceAndShi, getHexData,
-  findNuclearHexagram, generateDestinyReport,
-} from './iching.js';
+import { TRIGRAMS, BRANCHES } from '../data/constants.js';
+import { buildNajiaBoard, generateDestinyReport } from './iching.js';
 import {
   solarToLunar, lunarToSolar, calculatePillars, calculateDestinyHexNumbers,
 } from './lunar.js';
@@ -58,35 +55,9 @@ export function computeDestiny(f) {
   const uMod = hexNums.upperTrigramId;
   const lMod = hexNums.lowerTrigramId;
   notes.push('流派提醒：梅花數（邵康節）起卦與京房納甲（六親、六神、世應）屬不同傳統，本站把梅花命卦套上納甲排盤是現代整合用法，並非古法原貌；六親、六神僅作性格與關係的象徵參考，不作吉凶定論。');
-  const palaceInfo = findPalaceAndShi(uMod, lMod);
-  const sixBeasts = getSixBeasts(pillars.dayStem);
-
-  const allBranches = [...NAJIA_TABLE[lMod].inner, ...NAJIA_TABLE[uMod].outer];
-
-  const getBits = (bin) => bin.split('').map(Number);
-  const lBits = getBits(TRIGRAMS[lMod].binary);
-  const uBits = getBits(TRIGRAMS[uMod].binary);
-  const allLinesBits = [lBits[2], lBits[1], lBits[0], uBits[2], uBits[1], uBits[0]];
-
-  const linesData = [];
-  for (let i = 0; i < 6; i++) {
-    const lineNum = i + 1;
-    const branch = allBranches[i];
-    const wuxing = BRANCH_WUXING[branch];
-    linesData.push({
-      lineNum,
-      bit: allLinesBits[i],
-      branch,
-      wuxing,
-      relation: getRelation(palaceInfo.palaceWuxing, wuxing),
-      beast: sixBeasts[i],
-      isShi: palaceInfo.shi === lineNum,
-      isYing: palaceInfo.ying === lineNum,
-    });
-  }
-
-  const originalHex = getHexData(uMod, lMod);
-  const nuclearHex = findNuclearHexagram(uMod, lMod);
+  // 與一事一占、唯心宗命卦共用同一套納甲排盤（含動爻、變卦、伏神）
+  const board = buildNajiaBoard({ upId: uMod, loId: lMod, moving: hexNums.movingLine, pillars });
+  const { palaceInfo, linesData, originalHex, nuclearHex } = board;
 
   const report = generateDestinyReport({
     birthdayStr: `${f.year}年${f.month}月${f.day}日`,
@@ -111,5 +82,8 @@ export function computeDestiny(f) {
     lTrigram: TRIGRAMS[lMod],
     linesData,
     palaceInfo,
+    moving: board.moving,
+    changedHex: board.changedHex,
+    fuShen: board.fuShen,
   };
 }

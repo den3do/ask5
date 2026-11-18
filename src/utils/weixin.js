@@ -51,52 +51,13 @@ export function changedTrigrams(upperId, lowerId, movingLine, TRIGRAMS) {
   return { upperId: idOf(up), lowerId: idOf(lo) };
 }
 
-// ───────── 六爻納甲排盤（與「占卜」頁同一套邏輯，供唯心宗命卦顯示）─────────
-import { TRIGRAMS, BRANCH_WUXING, WUXING_RELATION, NAJIA_TABLE } from '../data/constants.js';
-import { getRelation, getSixBeasts, findPalaceAndShi, checkBranchInteraction } from './iching.js';
+// ───────── 六爻納甲排盤（與一事一占、易經命卦共用 buildNajiaBoard）─────────
+import { buildNajiaBoard } from './iching.js';
 import { calculatePillars } from './lunar.js';
 
 export function buildWeixinChart(birth, upId, loId, movingLine) {
   const c = birth.moment?.chinese || chineseClock(birth.year, birth.month, birth.day, birth.hour);
   const pillars = calculatePillars(c.year, c.month, c.day, c.hourIdx, { utc: birth.moment?.utc });
-  const palace = findPalaceAndShi(upId, loId);
-  const beasts = getSixBeasts(pillars.dayStem);
-  const ch = changedTrigrams(upId, loId, movingLine, TRIGRAMS);
-  const bitsOf = (id) => TRIGRAMS[id].binary.split('').map(Number);
-  const lb = bitsOf(loId);
-  const ub = bitsOf(upId);
-  const bits = [lb[2], lb[1], lb[0], ub[2], ub[1], ub[0]]; // 初爻→上爻
-  const branches = [...NAJIA_TABLE[loId].inner, ...NAJIA_TABLE[upId].outer];
-  const newBranches = ch ? [...NAJIA_TABLE[ch.lowerId].inner, ...NAJIA_TABLE[ch.upperId].outer] : null;
-
-  const lines = bits.map((bit, i) => {
-    const lineNum = i + 1;
-    const branch = branches[i];
-    const wuxing = BRANCH_WUXING[branch];
-    const isMoving = movingLine === lineNum;
-    let changed = null;
-    if (isMoving) {
-      const cBranch = newBranches[i];
-      const cWuxing = BRANCH_WUXING[cBranch];
-      changed = {
-        branch: cBranch,
-        wuxing: cWuxing,
-        relation: getRelation(palace.palaceWuxing, cWuxing),
-        interact: WUXING_RELATION[cWuxing][wuxing],
-        specialInteract: checkBranchInteraction(branch, cBranch),
-      };
-    }
-    return {
-      lineNum, bit, branch, wuxing,
-      relation: getRelation(palace.palaceWuxing, wuxing),
-      beast: beasts[i],
-      isShi: palace.shi === lineNum,
-      isYing: palace.ying === lineNum,
-      isMoving,
-      isKongWang: pillars.kongWang.includes(branch),
-      isYuePo: branch === pillars.yuePoBranch,
-      changed,
-    };
-  });
-  return { lines, pillars, palace };
+  const board = buildNajiaBoard({ upId, loId, moving: movingLine || null, pillars });
+  return { lines: board.linesData, pillars, palace: board.palaceInfo, fuShen: board.fuShen, board };
 }

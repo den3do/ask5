@@ -6,7 +6,9 @@
 import { lunarYearOf, baziYearOf, calculatePillars } from '../src/utils/lunar.js';
 import { analyzeBazi, compareBazi } from '../src/utils/bazi.js';
 import { calculateZiweiAstrolabe, analyzeDecadals } from '../src/utils/ziwei.js';
-import { evaluateDivination, getTopicYongShen, buildDivinationBoard } from '../src/utils/iching.js';
+import { evaluateDivination, getTopicYongShen, buildDivinationBoard, buildNajiaBoard } from '../src/utils/iching.js';
+import { computeDestiny } from '../src/utils/destiny.js';
+import { buildWeixinChart } from '../src/utils/weixin.js';
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log('✗ FAIL', m); } else console.log('✓', m); };
@@ -142,6 +144,27 @@ ok(baziYearOf(d('2027-02-05T04:00:00Z')) === 2027, '2027-02-05 八字年為 2027
   // 1、1、1 → 乾為天、初爻動
   const b2 = buildDivinationBoard({ num1: 1, num2: 1, num3: 1, pillars });
   ok(b2.originalHex.name === '乾為天' && b2.moving === 1 && b2.linesData[0].isMoving, '1、1、1 → 乾為天、初爻動');
+
+  // 三處共用排盤：一事一占（數字）與命卦（直接給上下卦）結果一致
+  const viaNums = buildDivinationBoard({ num1: 6, num2: 3, num3: 5, pillars });
+  const viaIds = buildNajiaBoard({ upId: 6, loId: 3, moving: 5, pillars });
+  ok(JSON.stringify(viaNums.linesData) === JSON.stringify(viaIds.linesData) && viaNums.changedHex.name === viaIds.changedHex.name, '6、3、5 與 上坎下離五爻動 排出同一盤（水火既濟）');
+
+  // 伏神：水火既濟、地火明夷（坎宮）皆缺妻財，午火伏於第 3 爻
+  const cai = viaIds.fuShen.find((f) => f.relation === '妻財');
+  ok(cai && cai.lineNum === 3 && cai.branch === '午' && cai.fly.branch === '亥', `水火既濟：妻財午火伏於第 3 爻亥水下（得 ${cai?.lineNum} ${cai?.branch}）`);
+  const mingYi = buildNajiaBoard({ upId: 0, loId: 3, moving: null, pillars });
+  ok(mingYi.originalHex.name === '地火明夷' && mingYi.fuShen.some((f) => f.relation === '妻財' && f.lineNum === 3 && f.branch === '午'), '地火明夷（無動爻）：亦顯示妻財午火伏神');
+  ok(mingYi.linesData.every((l) => !l.isMoving && l.changed === null), '無動爻時六爻皆安靜');
+  ok(b1.fuShen.length === 0 || b1.fuShen.every((f) => !b1.linesData.some((l) => l.relation === f.relation)), '伏神只取卦中不現的六親');
+}
+
+// 10. 易經命卦、唯心宗命卦改用共用排盤
+{
+  const dst = computeDestiny({ name: '測試', calendarType: 'solar', year: 1990, month: 6, day: 15, hourIdx: 6, gender: '男' });
+  ok(dst.moving >= 1 && dst.moving <= 6 && dst.linesData.filter((l) => l.isMoving).length === 1 && Array.isArray(dst.fuShen), `易經命卦帶動爻（第 ${dst.moving} 爻）與伏神資料`);
+  const wx = buildWeixinChart({ year: 1990, month: 6, day: 15, hour: 12 }, 0, 3, 2);
+  ok(wx.lines.length === 6 && wx.lines[1].isMoving && wx.fuShen.some((f) => f.relation === '妻財'), '唯心宗命卦：地火明夷二爻動，含妻財伏神');
 }
 
 console.log(fail ? `\n${fail} 項失敗` : '\n全部通過');

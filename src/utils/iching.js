@@ -215,29 +215,19 @@ export const getTopicYongShen = (topic, gender = '男') => {
 };
 
 /**
- * 【一事一占：排盤】
- * 依三個心念數字與當前四柱，排出一事一占的完整盤面（純函式，不依賴 UI，可獨立測試）。
- * 上卦 = 數字1 % 8、下卦 = 數字2 % 8、動爻 = 數字3 % 6（整除時分別取 8 / 6）。
+ * 【六爻納甲排盤：共用核心】
+ * 一事一占、易經命卦、唯心宗命卦共用同一套排盤，避免三處各自複製而行為不一。
  * @param {Object} args
- * @param {number} args.num1 上卦取數
- * @param {number} args.num2 下卦取數
- * @param {number} args.num3 動爻取數
- * @param {Object} args.pillars 當前四柱（需含 dayStem、kongWang、yuePoBranch、riPoBranch）
+ * @param {number} args.upId 上卦（TRIGRAMS key：乾1 兌2 離3 震4 巽5 坎6 艮7 坤0）
+ * @param {number} args.loId 下卦
+ * @param {number|null} args.moving 動爻（1=初爻…6=上爻；null 表示無動爻）
+ * @param {Object} args.pillars 四柱（需含 dayStem、kongWang、yuePoBranch、riPoBranch）
  * @returns {Object} { uMod, lMod, moving, uTrigram, lTrigram, newUId, newLId, newUTrigram, newLTrigram,
- *                     palaceInfo, linesData, originalHex, changedHex, nuclearHex }
+ *                     palaceInfo, linesData, fuShen, originalHex, changedHex, nuclearHex }
  */
-export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
-  let uNum = num1 % 8;
-  if (uNum === 0) uNum = 8;
-  let lNum = num2 % 8;
-  if (lNum === 0) lNum = 8;
-  let moving = num3 % 6;
-  if (moving === 0) moving = 6;
-
-  const toTrigramKey = (num) => (num === 8 ? 0 : num);
-  const uMod = toTrigramKey(uNum);
-  const lMod = toTrigramKey(lNum);
-
+export const buildNajiaBoard = ({ upId, loId, moving = null, pillars }) => {
+  const uMod = Number(upId);
+  const lMod = Number(loId);
   const uTrigram = TRIGRAMS[uMod];
   const lTrigram = TRIGRAMS[lMod];
 
@@ -249,10 +239,9 @@ export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
   const newLBits = [...lBits];
   const newUBits = [...uBits];
   const flip = (bit) => (bit === 1 ? 0 : 1);
-  if (moving <= 3) {
-    newLBits[3 - moving] = flip(newLBits[3 - moving]);
-  } else {
-    newUBits[6 - moving] = flip(newUBits[6 - moving]);
+  if (moving) {
+    if (moving <= 3) newLBits[3 - moving] = flip(newLBits[3 - moving]);
+    else newUBits[6 - moving] = flip(newUBits[6 - moving]);
   }
 
   const findId = (bits) => {
@@ -322,10 +311,57 @@ export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
     newLTrigram: TRIGRAMS[newLId],
     palaceInfo,
     linesData,
+    fuShen: findFuShen({ linesData, palaceInfo, pillars }),
     originalHex: getHexData(uMod, lMod),
     changedHex: getHexData(newUId, newLId),
     nuclearHex: findNuclearHexagram(uMod, lMod),
   };
+};
+
+/**
+ * 【伏神】卦中不現的六親，取本宮八純卦同位之爻為伏神，伏於該位飛神之下。
+ * 同一六親在純卦出現兩次時取較下方者（與用神伏神取法一致）。
+ * @returns {Array} [{ lineNum, relation, branch, wuxing, isKongWang, isYuePo, fly }]
+ */
+export const findFuShen = ({ linesData, palaceInfo, pillars }) => {
+  const pure = NAJIA_TABLE[palaceInfo?.palaceId];
+  if (!pure) return [];
+  const pureBranches = [...pure.inner, ...pure.outer];
+  const present = new Set(linesData.map((l) => l.relation));
+  const result = [];
+  for (const relation of ['父母', '兄弟', '子孫', '妻財', '官鬼']) {
+    if (present.has(relation)) continue;
+    const idx = pureBranches.findIndex((b) => getRelation(palaceInfo.palaceWuxing, BRANCH_WUXING[b]) === relation);
+    if (idx < 0) continue;
+    const branch = pureBranches[idx];
+    result.push({
+      lineNum: idx + 1,
+      relation,
+      branch,
+      wuxing: BRANCH_WUXING[branch],
+      isKongWang: (pillars?.kongWang || []).includes(branch),
+      isYuePo: branch === pillars?.yuePoBranch,
+      fly: linesData[idx],
+    });
+  }
+  return result;
+};
+
+/**
+ * 【一事一占：排盤】
+ * 依三個心念數字與當前四柱，排出一事一占的完整盤面（純函式，不依賴 UI，可獨立測試）。
+ * 上卦 = 數字1 % 8、下卦 = 數字2 % 8、動爻 = 數字3 % 6（整除時分別取 8 / 6）。
+ * @param {Object} args
+ * @param {number} args.num1 上卦取數
+ * @param {number} args.num2 下卦取數
+ * @param {number} args.num3 動爻取數
+ * @param {Object} args.pillars 當前四柱（需含 dayStem、kongWang、yuePoBranch、riPoBranch）
+ * @returns {Object} 同 buildNajiaBoard
+ */
+export const buildDivinationBoard = ({ num1, num2, num3, pillars }) => {
+  const toTrigramKey = (n) => (n % 8 === 0 ? 0 : n % 8); // 8（坤）→ 0
+  const moving = num3 % 6 || 6;
+  return buildNajiaBoard({ upId: toTrigramKey(num1), loId: toTrigramKey(num2), moving, pillars });
 };
 
 /**

@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Explainer, SectionTitle } from '../ui';
 import SmartReading from '../SmartReading';
+import NajiaTable from '../NajiaTable';
 import { TRIGRAMS } from '../../data/constants';
 import { getHexData } from '../../utils/iching';
-import { weixinMingGua, changedTrigrams, buildWeixinChart } from '../../utils/weixin';
+import { weixinMingGua, buildWeixinChart } from '../../utils/weixin';
 
 // 八卦取象（依唯心宗／易經常見象義整理）
 const TRIGRAM_IMAGE = {
@@ -24,109 +25,6 @@ const WEIXIN_SYSTEM = `你是一位精通台灣「唯心宗（唯心聖教）」
 2. 解卦時分上卦（外在、環境、對外呈現）與下卦（內在、本質、心性）。例如「地火明夷」：上卦坤（大地、包容、承載、外在低調沉穩）、下卦離（光明、智慧、內在明亮），象義為光明入地中，內有洞察與智慧，外在多扮演默默支撐、韜光養晦的角色。
 3. 融合唯心宗「易經心法、妙法人間」的實修精神，把卦象與當事人的實際生活、職場定位深度結合。語氣穩健、具智慧啟發性，避免過度迷信的宿命論，強調「知己知彼，順天應人，內明外順」。
 一律使用繁體中文。`;
-
-function HexLines({ upId, loId, moving }) {
-  const bits = [...TRIGRAMS[upId].binary, ...TRIGRAMS[loId].binary]; // 由上而下
-  return (
-    <div className="space-y-2 w-40 mx-auto" aria-label="卦象">
-      {bits.map((b, i) => {
-        const isMoving = moving === 6 - i; // 初爻=最下方
-        const bar = isMoving ? 'bg-rose-400' : 'bg-amber-300';
-        return (
-          <div key={i} className={`relative flex justify-between ${i === 2 ? 'mb-3' : ''}`}>
-            {b === '1' ? <div className={`h-3 w-full rounded-sm ${bar}`} /> : (
-              <>
-                <div className={`h-3 w-[44%] rounded-sm ${bar}`} />
-                <div className={`h-3 w-[44%] rounded-sm ${bar}`} />
-              </>
-            )}
-            {isMoving && <span className="absolute -right-9 top-1/2 -translate-y-1/2 text-[11px] text-rose-300 whitespace-nowrap">○動</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Yao({ bit, cls, wide = 'w-16' }) {
-  return (
-    <div className={`${wide} flex justify-between`}>
-      {bit === 1 ? <div className={`w-full h-2.5 rounded-sm ${cls}`} /> : (
-        <>
-          <div className={`w-[45%] h-2.5 rounded-sm ${cls}`} />
-          <div className={`w-[45%] h-2.5 rounded-sm ${cls}`} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function ChartTable({ chart }) {
-  const { lines, pillars } = chart;
-  return (
-    <div className="bg-white rounded-xl shadow border border-stone-200 overflow-hidden font-sans">
-      <div className="bg-stone-100 px-6 py-3 border-b border-stone-200 font-bold text-stone-800 text-sm">六爻全景納甲排盤 (從上爻至初爻)</div>
-      <div className="px-6 py-3 border-b border-stone-200 bg-amber-50/50 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-        <span className="text-xs text-stone-500">起卦時間</span>
-        {[['年', pillars.year], ['月', pillars.month], ['日', pillars.day], ['時', pillars.hour]].map(([k, v]) => (
-          <span key={k} className="text-stone-600"><strong className="text-stone-900 text-base tracking-wider">{v}</strong><span className="text-xs ml-0.5">{k}</span></span>
-        ))}
-        <span className="text-xs text-stone-600">旬空：<strong className="text-amber-700">{pillars.kongWang.join('、') || '無'}</strong></span>
-        <span className="text-xs text-stone-600">月破：<strong className="text-rose-600">{pillars.yuePoBranch}</strong></span>
-        <span className="text-xs text-stone-600">日破：<strong className="text-purple-600">{pillars.riPoBranch}</strong></span>
-      </div>
-      <div className="overflow-x-auto p-4">
-        <table className="w-full text-left text-sm border-collapse min-w-[640px]">
-          <thead>
-            <tr className="border-b border-stone-200 text-xs text-stone-500">
-              <th className="py-2 px-3">六神</th>
-              <th className="py-2 px-3">六親標註</th>
-              <th className="py-2 px-3">本卦爻象</th>
-              <th className="py-2 px-3">干支五行</th>
-              <th className="py-2 px-3 text-center">卦爻符號 (本 ➔ 變)</th>
-              <th className="py-2 px-3">動變與回頭作用</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {[...lines].reverse().map((line) => (
-              <tr key={line.lineNum} className={line.isMoving ? 'bg-amber-50/60' : ''}>
-                <td className="py-2.5 px-3 font-medium text-xs text-stone-600">{line.beast}</td>
-                <td className="py-2.5 px-3">
-                  <span className="font-bold text-stone-800">{line.relation}</span>
-                  {line.isShi && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-rose-600 text-white">世</span>}
-                  {line.isYing && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-blue-600 text-white">應</span>}
-                  {line.isKongWang && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-amber-600 text-white">空</span>}
-                  {line.isYuePo && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-purple-600 text-white">月破</span>}
-                </td>
-                <td className="py-2.5 px-3 text-xs text-stone-600">第 {line.lineNum} 爻 ({line.bit === 1 ? '陽' : '陰'})</td>
-                <td className="py-2.5 px-3 font-mono font-bold text-stone-700">{line.branch}{line.wuxing}</td>
-                <td className="py-2.5 px-3">
-                  <div className="flex items-center justify-center gap-3">
-                    <Yao bit={line.bit} cls="bg-stone-800" />
-                    <span className="text-stone-300 text-xs">➔</span>
-                    {line.isMoving
-                      ? <Yao bit={line.bit === 1 ? 0 : 1} cls="bg-amber-600" />
-                      : <div className="opacity-70"><Yao bit={line.bit} cls="bg-stone-300" /></div>}
-                  </div>
-                </td>
-                <td className="py-2.5 px-3 text-xs">
-                  {line.isMoving && line.changed ? (
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-amber-900">動化: {line.changed.relation} {line.changed.branch}{line.changed.wuxing}</div>
-                      <div className="text-stone-600 text-[11px]">
-                        ({line.changed.interact}本爻{line.changed.specialInteract && <span className="ml-1 text-rose-600 font-bold">・{line.changed.specialInteract}</span>})
-                      </div>
-                    </div>
-                  ) : <span className="text-stone-400 text-xs">安靜</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 function TrigramSelect({ label, value, onChange }) {
   return (
@@ -160,7 +58,6 @@ ${hex.name !== computedName ? `（備註：自動排卦規則排出的命卦為�
 }
 
 export default function WeixinPanel({ profile, onOpenSettings }) {
-  const d = profile.destiny;
   const wx = weixinMingGua(profile.birth);
   const compU = wx.upperId;
   const compL = wx.lowerId;
@@ -180,36 +77,35 @@ export default function WeixinPanel({ profile, onOpenSettings }) {
         <p><b>自動排卦規則</b>（依實測樣本反推）：換成農曆後，<b>上卦＝農曆日 ÷ 8 的餘數，下卦＝農曆月 ÷ 8 的餘數</b>（餘 0 為坤）。目前僅經少數樣本驗證，<b>不保證與官方完全一致</b>；若與你取得的命卦不同，可用下拉選單手動指定，解說與 AI 解讀會以你指定的卦為準。</p>
       </Explainer>
 
-      <div className="rounded-2xl bg-stone-900 text-amber-100 p-5 shadow-lg grid grid-cols-1 sm:grid-cols-2 gap-5 items-center">
-        <div className="text-center">
-          <div className="text-xs text-amber-400/80 tracking-widest">唯心宗命卦</div>
-          <div className="text-4xl font-black mt-1 tracking-wide">{hex.name}</div>
-          <div className="text-xs text-stone-300 mt-1">上{up.name}（{up.nature}）　下{lo.name}（{lo.nature}）</div>
-          <div className="mt-4"><HexLines upId={upId} loId={loId} moving={wx.movingLine} /></div>
-        </div>
-        <div className="space-y-3 font-sans">
-          <div className="flex flex-col gap-2 bg-white rounded-xl p-3">
-            <TrigramSelect label="上卦（外）" value={upId} onChange={setUpId} />
-            <TrigramSelect label="下卦（內）" value={loId} onChange={setLoId} />
-            {changed && (
-              <button type="button" onClick={() => { setUpId(compU); setLoId(compL); }} className="self-start flex items-center gap-1 text-xs text-amber-700 hover:underline">
-                <RotateCcw className="w-3 h-3" />還原為自動排卦（{computedName}）
-              </button>
+      {(() => {
+        const chart = buildWeixinChart(profile.birth, upId, loId, wx.movingLine);
+        const changedHex = wx.movingLine ? chart.board.changedHex : null;
+        return (
+          <NajiaTable
+            lines={chart.lines}
+            pillars={chart.pillars}
+            fuShen={chart.fuShen}
+            timeLabel="出生四柱"
+            headerRight={(
+              <>
+                唯心宗命卦：<strong className="text-stone-800">{hex.name}</strong>・{chart.palace.palaceName}宮（{chart.palace.palaceWuxing}）
+                {changedHex && <>・{['初', '二', '三', '四', '五', '上'][wx.movingLine - 1]}爻動（依時辰）➔ 變卦 {changedHex.name}</>}
+              </>
             )}
-          </div>
-          <div className="text-[11px] text-stone-300">四柱：{d.meta.pillars}</div>
-          {wx.movingLine && (() => {
-            const ch = changedTrigrams(upId, loId, wx.movingLine, TRIGRAMS);
-            return (
-              <div className="text-[11px] text-stone-300">
-                動爻：{['初', '二', '三', '四', '五', '上'][wx.movingLine - 1]}爻（依時辰）　變卦：{getHexData(ch.upperId, ch.lowerId).name}
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      <ChartTable chart={buildWeixinChart(profile.birth, upId, loId, wx.movingLine)} />
+            toolbar={(
+              <>
+                <TrigramSelect label="上卦（外）" value={upId} onChange={setUpId} />
+                <TrigramSelect label="下卦（內）" value={loId} onChange={setLoId} />
+                {changed && (
+                  <button type="button" onClick={() => { setUpId(compU); setLoId(compL); }} className="flex items-center gap-1 text-xs text-amber-700 hover:underline">
+                    <RotateCcw className="w-3 h-3" />還原為自動排卦（{computedName}）
+                  </button>
+                )}
+              </>
+            )}
+          />
+        );
+      })()}
 
       <div>
         <SectionTitle sub="上卦看外在、下卦看內在">內外取象</SectionTitle>

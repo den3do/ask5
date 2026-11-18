@@ -13,6 +13,7 @@ import {
 import { chineseClock } from './utils/chineseTime';
 import AiSettingsModal from './components/AiSettingsModal';
 import SmartReading from './components/SmartReading';
+import NajiaTable from './components/NajiaTable';
 const PersonalHub = lazy(() => import('./components/PersonalHub'));
 const SynastryReport = lazy(() => import('./components/SynastryReport'));
 const MbtiTest = lazy(() => import('./components/MbtiTest'));
@@ -128,14 +129,9 @@ const DivinationApp = () => {
       palaceId: palaceInfo.palaceId,
     });
 
-    const ysInfo = evaluation.yongShen;
     const linesWithYongShen = linesData.map(l => ({
       ...l,
-      isYongShen: l.relation === ysInfo.relation,
-      // 用神不現時，伏神藏在同位飛神之下
-      fuShen: ysInfo.isFu && l.lineNum === ysInfo.lineNum
-        ? { relation: ysInfo.relation, branch: ysInfo.branch, wuxing: ysInfo.wuxing, isKongWang: ysInfo.isKongWang, isYuePo: ysInfo.isYuePo }
-        : null
+      isYongShen: l.relation === evaluation.yongShen.relation
     }));
 
     setDivResult({
@@ -145,6 +141,7 @@ const DivinationApp = () => {
       newLTrigram,
       palaceInfo,
       linesData: linesWithYongShen,
+      fuShen: board.fuShen,
       moving,
       originalHex,
       changedHex,
@@ -159,16 +156,17 @@ const DivinationApp = () => {
   // 生成 AI Prompt (方便使用者額外複製)
   useEffect(() => {
     if (!divResult) return;
-    const { pillars, linesData, moving, palaceInfo, originalHex, changedHex, nuclearHex, evaluation, topic, question } = divResult;
+    const { pillars, linesData, fuShen = [], moving, palaceInfo, originalHex, changedHex, nuclearHex, evaluation, topic, question } = divResult;
 
     const linesStr = [...linesData].reverse().map(l => {
+      const fu = fuShen.find(f => f.lineNum === l.lineNum);
       const tags = [];
       if (l.isShi) tags.push('【世】');
       if (l.isYing) tags.push('【應】');
       if (l.isKongWang) tags.push('【空】');
       if (l.isYuePo) tags.push('【月破】');
       if (l.isYongShen) tags.push('【用神】');
-      if (l.fuShen) tags.push(`（下伏 [${l.fuShen.relation}] ${l.fuShen.branch}${l.fuShen.wuxing}【伏神・用神】）`);
+      if (fu) tags.push(`（下伏 [${fu.relation}] ${fu.branch}${fu.wuxing}【伏神${fu.relation === evaluation.yongShen.relation ? '・用神' : ''}】）`);
       const base = `第${l.lineNum}爻 ${l.bit === 1 ? '陽爻 ⚊' : '陰爻 ⚋'} 臨${l.beast} [${l.relation}] ${l.branch}${l.wuxing} ${tags.join('')}`;
       if (l.isMoving && l.changed) {
         return `${base} ➔ 動化: [${l.changed.relation}] ${l.changed.branch}${l.changed.wuxing} (${l.changed.interact}本爻 ${l.changed.specialInteract || ''})`;
@@ -580,11 +578,14 @@ ${linesStr}
                   </dl>
                 </details>
 
-                {/* 六爻詳細納甲盤面表格 */}
-                <div className="bg-white rounded-xl shadow border border-stone-200 overflow-hidden">
-                  <div className="bg-stone-100 px-6 py-3 border-b border-stone-200 flex items-center justify-between">
-                    <span className="font-bold text-stone-800 text-sm">六爻全景納甲排盤 (從上爻至初爻)</span>
-                    <span className="text-xs text-stone-500">
+                {/* 六爻詳細納甲盤面表格（與易經命卦、唯心宗命卦共用） */}
+                <NajiaTable
+                  lines={divResult.linesData}
+                  pillars={divResult.pillars}
+                  fuShen={divResult.fuShen}
+                  yongShenRelation={divResult.evaluation.yongShen.relation}
+                  headerRight={(
+                    <>
                       用神：<strong className="text-indigo-600">{divResult.evaluation.yongShen.name}</strong> ({divResult.evaluation.yongShen.wuxing}・{divResult.evaluation.yongShen.status}氣)
                       {divResult.evaluation.yongShen.isFu && (
                         <span className="ml-1 text-indigo-600">・伏於第 {divResult.evaluation.yongShen.lineNum} 爻之下</span>
@@ -592,153 +593,9 @@ ${linesStr}
                       {divResult.evaluation.yongShen.isSubstitute && (
                         <span className="ml-1 text-rose-600">・不現無伏，以世爻代</span>
                       )}
-                    </span>
-                  </div>
-
-                  {/* 起卦時間四柱：供看卦者解卦 */}
-                  <div className="px-6 py-3 border-b border-stone-200 bg-amber-50/50 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-                    <span className="text-xs text-stone-500">起卦時間</span>
-                    {[['年', divResult.pillars.year], ['月', divResult.pillars.month], ['日', divResult.pillars.day], ['時', divResult.pillars.hour]].map(([k, v]) => (
-                      <span key={k} className="text-stone-600">
-                        <strong className="text-stone-900 text-base tracking-wider">{v}</strong>
-                        <span className="text-xs ml-0.5">{k}</span>
-                      </span>
-                    ))}
-                    <span className="text-xs text-stone-600">旬空：<strong className="text-amber-700">{divResult.pillars.kongWang.join('、') || '無'}</strong></span>
-                    <span className="text-xs text-stone-600">月破：<strong className="text-rose-600">{divResult.pillars.yuePoBranch}</strong></span>
-                    <span className="text-xs text-stone-600">日破：<strong className="text-purple-600">{divResult.pillars.riPoBranch}</strong></span>
-                  </div>
-
-                  <div className="overflow-x-auto p-4">
-                    <table className="w-full text-left text-sm border-collapse min-w-[640px]">
-                      <thead>
-                        <tr className="border-b border-stone-200 text-xs text-stone-500">
-                          <th className="py-2 px-3" title="每一爻附帶的性格標籤">六神</th>
-                          <th className="py-2 px-3" title="這一爻代表的角色：財、官、父母、子孫、兄弟；世＝你、應＝對方">六親標註</th>
-                          <th className="py-2 px-3" title="第幾爻，陽＝實線、陰＝斷線">本卦爻象</th>
-                          <th className="py-2 px-3" title="這一爻對應的地支與五行">干支五行</th>
-                          <th className="py-2 px-3 text-center" title="左邊是現況，右邊是變化後">卦爻符號 (本 ➔ 變)</th>
-                          <th className="py-2 px-3" title="只有動爻會變化；安靜＝不變">動變與回頭作用</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-stone-100">
-                        {[...divResult.linesData].reverse().map((line, idx) => (
-                          <tr 
-                            key={idx}
-                            className={`hover:bg-stone-50 transition-colors ${
-                              line.isMoving ? 'bg-amber-50/60' : ''
-                            } ${line.isYongShen || line.fuShen ? 'bg-indigo-50/50' : ''}`}
-                          >
-                            <td className="py-2.5 px-3 font-medium text-xs text-stone-600">
-                              {line.beast}
-                            </td>
-
-                            <td className="py-2.5 px-3">
-                              <span className="font-bold text-stone-800">{line.relation}</span>
-                              {line.isShi && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-rose-600 text-white shadow-sm">世</span>
-                              )}
-                              {line.isYing && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-blue-600 text-white shadow-sm">應</span>
-                              )}
-                              {line.isKongWang && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-amber-600 text-white">空</span>
-                              )}
-                              {line.isYuePo && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-purple-600 text-white">月破</span>
-                              )}
-                              {line.isYongShen && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-black bg-indigo-600 text-white">用神</span>
-                              )}
-                              {line.fuShen && (
-                                <div
-                                  className="mt-1.5 flex items-center gap-1 text-xs text-indigo-700"
-                                  title="用神不現於卦中，取本宮八純卦同位之爻為伏神，藏在這一爻（飛神）之下"
-                                >
-                                  <span className="px-1 py-0.5 rounded border border-dashed border-indigo-400 text-[10px] font-black">伏</span>
-                                  <span className="font-bold">{line.fuShen.relation}</span>
-                                  <span className="font-mono font-bold">{line.fuShen.branch}{line.fuShen.wuxing}</span>
-                                  {line.fuShen.isKongWang && (
-                                    <span className="px-1 py-0.5 rounded text-[10px] font-black bg-amber-600 text-white">空</span>
-                                  )}
-                                  {line.fuShen.isYuePo && (
-                                    <span className="px-1 py-0.5 rounded text-[10px] font-black bg-purple-600 text-white">月破</span>
-                                  )}
-                                  <span className="px-1 py-0.5 rounded text-[10px] font-black bg-indigo-600 text-white">用神</span>
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-3 text-xs text-stone-600">
-                              第 {line.lineNum} 爻 ({line.bit === 1 ? '陽' : '陰'})
-                            </td>
-
-                            <td className="py-2.5 px-3 font-mono font-bold text-stone-700">
-                              {line.branch}{line.wuxing}
-                            </td>
-
-                            {/* 爻符號繪製 */}
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center justify-center gap-3">
-                                <div className="w-16 flex justify-between">
-                                  {line.bit === 1 ? (
-                                    <div className="w-full h-2.5 bg-stone-800 rounded-sm"></div>
-                                  ) : (
-                                    <>
-                                      <div className="w-[45%] h-2.5 bg-stone-800 rounded-sm"></div>
-                                      <div className="w-[45%] h-2.5 bg-stone-800 rounded-sm"></div>
-                                    </>
-                                  )}
-                                </div>
-                                <span className="text-stone-300 text-xs">➔</span>
-                                <div className="w-16 flex justify-between opacity-70">
-                                  {line.isMoving ? (
-                                    line.bit === 1 ? (
-                                      <>
-                                        <div className="w-[45%] h-2.5 bg-amber-600 rounded-sm"></div>
-                                        <div className="w-[45%] h-2.5 bg-amber-600 rounded-sm"></div>
-                                      </>
-                                    ) : (
-                                      <div className="w-full h-2.5 bg-amber-600 rounded-sm"></div>
-                                    )
-                                  ) : (
-                                    line.bit === 1 ? (
-                                      <div className="w-full h-2.5 bg-stone-300 rounded-sm"></div>
-                                    ) : (
-                                      <>
-                                        <div className="w-[45%] h-2.5 bg-stone-300 rounded-sm"></div>
-                                        <div className="w-[45%] h-2.5 bg-stone-300 rounded-sm"></div>
-                                      </>
-                                    )
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* 動變作用說明 */}
-                            <td className="py-2.5 px-3 text-xs">
-                              {line.isMoving && line.changed ? (
-                                <div className="space-y-0.5">
-                                  <div className="font-bold text-amber-900">
-                                    動化: {line.changed.relation} {line.changed.branch}{line.changed.wuxing}
-                                  </div>
-                                  <div className="text-stone-600 text-[11px]">
-                                    ({line.changed.interact}本爻
-                                    {line.changed.specialInteract && (
-                                      <span className="ml-1 text-rose-600 font-bold">・{line.changed.specialInteract}</span>
-                                    )})
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="text-stone-400 text-xs">安靜</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                    </>
+                  )}
+                />
 
                 {/* AI 即時深度斷卦區塊 */}
                 <SmartReading
